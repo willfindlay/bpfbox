@@ -1,0 +1,8 @@
+#! /usr/bin/env python3
+
+from bpfbox.argument_parser import parse_args
+from bpfbox.bpfboxd import main
+
+if __name__ == "__main__":
+    args = parse_args()
+    main(args)
