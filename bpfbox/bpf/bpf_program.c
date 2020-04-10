@@ -9,6 +9,7 @@ BPF_ARRAY(__init_profile, struct bpfbox_profile, 1);
 
 BPF_TABLE("lru_hash", u32, struct bpfbox_process, processes, 10240);
 BPF_TABLE("lru_hash", u64, struct bpfbox_profile, profiles, 10240);
+BPF_PROG_ARRAY(rules, 10240);
 
 /* Helper functions below this line ----------------------------------------- */
 
@@ -40,6 +41,7 @@ static __always_inline struct bpfbox_profile *create_profile(u64 key)
 
 /* BPF programs below this line --------------------------------------------- */
 
+/* When a task forks */
 RAW_TRACEPOINT_PROBE(sched_process_fork)
 {
     struct bpfbox_process *process;
@@ -76,6 +78,7 @@ RAW_TRACEPOINT_PROBE(sched_process_fork)
     return 0;
 }
 
+/* When a task loads a program with execve */
 //RAW_TRACEPOINT_PROBE(sched_process_exec)
 //{
 //    u32 pid = ebpH_get_pid();
@@ -120,12 +123,12 @@ RAW_TRACEPOINT_PROBE(sched_process_fork)
 //
 //    return 0;
 //}
-//
-///* When a task exits */
-//RAW_TRACEPOINT_PROBE(sched_process_exit)
-//{
-//    u32 pid = ebpH_get_pid();
-//    processes.delete(&pid);
-//
-//    return 0;
-//}
+
+/* When a task exits */
+RAW_TRACEPOINT_PROBE(sched_process_exit)
+{
+    u32 pid = (u32)bpf_get_current_pid_tgid();
+    processes.delete(&pid);
+
+    return 0;
+}
