@@ -6,3 +6,22 @@ bpf_prog_path = os.path.join(project_path, 'bpfbox/bpf/bpf_program.c')
 
 # Time to sleep between daemon ticks in seconds
 ticksleep = 0.1
+
+# Path to working directory
+working_directory = '/var/log/bpfbox'
+
+# Path to pidfile
+pidfile = '/var/run/bpfboxd.pid'
+
+# Path to logfile
+logfile = '/var/log/bpfbox/bpfbox.log'
+
+def init():
+    """
+    Make sure things are setup properly.
+    """
+
+    try:
+        os.makedirs(working_directory, mode=0o1700, exist_ok=True)
+    except OSError:
+        os.chmod(working_directory, mode=0o1700)
