@@ -1,12 +1,16 @@
 import os, sys
-import time
+import atexit
 import signal
+import time
 
 from bcc import BPF
 from daemon import DaemonContext, pidfile
 
 from bpfbox import defs
 from bpfbox.exceptions import DaemonNotRunningError
+
+signal.signal(signal.SIGTERM, lambda x,y: sys.exit(0))
+signal.signal(signal.SIGINT, lambda x,y: sys.exit(0))
 
 class BPFBoxd:
     """
@@ -27,8 +31,9 @@ class BPFBoxd:
             text = f.read()
         # Set flags
         flags = []
-        flags.append(f'-I{defs.project_path}/bpfbox/bpf')
+        flags.append(f'-I{defs.project_path}')
         self.bpf = BPF(text=text, cflags=flags)
+        atexit.register(self.cleanup)
 
     def get_pid(self):
         """
@@ -71,6 +76,12 @@ class BPFBoxd:
             pass
         self.start_daemon()
 
+    def cleanup(self):
+        """
+        Perform cleanup hooks before exit.
+        """
+        self.bpf = None
+
     def loop_forever(self):
         """
         BPFBoxd main event loop.
@@ -84,7 +95,6 @@ def main(args):
     Main entrypoint for BPFBox daemon.
     Generally should be invoked with parse_args.
     """
-
     defs.init()
     b = BPFBoxd(args)
 
@@ -103,6 +113,3 @@ def main(args):
                   'you may need to kill manually.', file=sys.stderr)
     if args.operation == 'restart':
         b.restart_daemon()
-
-    # NOT REACHED
-    sys.exit(-1)
