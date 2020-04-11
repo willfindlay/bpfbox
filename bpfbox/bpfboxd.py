@@ -4,15 +4,14 @@ import signal
 import time
 
 from bcc import BPF
-from daemon import DaemonContext, pidfile
 
 from bpfbox import defs
-from bpfbox.exceptions import DaemonNotRunningError
+from bpfbox.daemon_mixin import DaemonMixin
 
 signal.signal(signal.SIGTERM, lambda x,y: sys.exit(0))
 signal.signal(signal.SIGINT, lambda x,y: sys.exit(0))
 
-class BPFBoxd:
+class BPFBoxd(DaemonMixin):
     """
     BPFBox's daemon class.
     Manages BPF programs and reads events in an event loop.
@@ -35,46 +34,8 @@ class BPFBoxd:
         self.bpf = BPF(text=text, cflags=flags)
         atexit.register(self.cleanup)
 
-    def get_pid(self):
-        """
-        Get pid of the running daemon.
-        """
-        try:
-            with open(defs.pidfile, 'r') as f:
-               return int(f.read().strip())
-        except:
-            return None
-
-    def stop_daemon(self):
-        """
-        Stop the daemon.
-        """
-        pid = self.get_pid()
-        try:
-            os.kill(pid, signal.SIGTERM)
-        except TypeError:
-            raise DaemonNotRunningError
-
-    def start_daemon(self):
-        """
-        Start the daemon.
-        """
-        with DaemonContext(
-                umask=0o022,
-                working_directory=defs.working_directory,
-                pidfile=pidfile.TimeoutPIDLockFile(defs.pidfile),
-                ):
-            self.loop_forever()
-
-    def restart_daemon(self):
-        """
-        Restart the daemon.
-        """
-        try:
-            self.stop_daemon()
-        except DaemonNotRunningError:
-            pass
-        self.start_daemon()
+    def write_profile_data_to_disk(self):
+        pass
 
     def cleanup(self):
         """
@@ -83,6 +44,7 @@ class BPFBoxd:
         # FIXME: delete this, for testing purposes
         for profile in self.bpf['profiles'].values():
             print(f'{profile.comm.decode("utf-8")} has tail call index {profile.tail_call_index}')
+        self.write_profile_data_to_disk()
         self.bpf = None
 
     def loop_forever(self):
