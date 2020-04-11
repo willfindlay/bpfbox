@@ -2,6 +2,8 @@
 #define BPF_PROGRAM_H
 
 #include <linux/sched.h>
+#include <linux/fs.h>
+#include <linux/binfmts.h>
 #include <uapi/linux/ptrace.h>
 #include <uapi/asm/unistd_64.h>
 
@@ -9,6 +11,7 @@
 
 struct bpfbox_profile
 {
+    int tail_call_index;
     char comm[TASK_COMM_LEN];
 };
 
@@ -21,6 +24,8 @@ struct bpfbox_process
 /* Helper functions definitions below this line ----------------------------- */
 
 static __always_inline struct bpfbox_process *create_process(u32 pid);
-static __always_inline struct bpfbox_profile *create_profile(u64 key);
+static __always_inline struct bpfbox_profile *create_profile(u64 key, const char *comm);
+
+static __always_inline int set_tail_index(struct bpfbox_profile *profile);
 
 #endif /* BPF_PROGRAM_H */

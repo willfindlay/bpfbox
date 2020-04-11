@@ -1,17 +1,43 @@
 #include "bpfbox/bpf/bpf_program.h"
+#include "bpfbox/bpf/helpers.h"
 
 /* Initializer arrays below this line --------------------------------------- */
 
 BPF_ARRAY(__init_process, struct bpfbox_process, 1);
 BPF_ARRAY(__init_profile, struct bpfbox_profile, 1);
+/* A global counter that stores the tail call index for new profiles.
+ * This counter is used to set the NEXT profile's tail_call_index. */
+BPF_ARRAY(__tail_call_index, int, 1);
 
 /* Map definitions below this line ------------------------------------------ */
 
+/* This map holds information about currently running processes */
 BPF_TABLE("lru_hash", u32, struct bpfbox_process, processes, 10240);
+/* This map holds information about the profiles bpfbox currently knows about */
 BPF_TABLE("lru_hash", u64, struct bpfbox_profile, profiles, 10240);
+/* This map holds rules that will be tail called when an enforcing process makes a system call */
 BPF_PROG_ARRAY(rules, 10240);
+/* This map holds entrypoints that cause a process to start enforcing */
+BPF_PROG_ARRAY(entrypoints, 10240);
 
 /* Helper functions below this line ----------------------------------------- */
+
+static __always_inline int set_tail_index(struct bpfbox_profile *profile)
+{
+    int zero = 0;
+    int *curr_idx = __tail_call_index.lookup(&zero);
+
+    if(!curr_idx)
+    {
+        return -1;
+    }
+
+    int temp = *curr_idx;
+    lock_xadd(curr_idx, 1);
+    profile->tail_call_index = temp;
+
+    return 0;
+}
 
 static __always_inline struct bpfbox_process *create_process(u32 pid)
 {
@@ -26,7 +52,7 @@ static __always_inline struct bpfbox_process *create_process(u32 pid)
     return process;
 }
 
-static __always_inline struct bpfbox_profile *create_profile(u64 key)
+static __always_inline struct bpfbox_profile *create_profile(u64 key, const char *comm)
 {
     int zero = 0;
     struct bpfbox_profile *profile = __init_profile.lookup(&zero);
@@ -34,12 +60,54 @@ static __always_inline struct bpfbox_profile *create_profile(u64 key)
     if (!profile)
         return NULL;
 
+    /* Set tail call index */
+    set_tail_index(profile);
+    bpf_probe_read_str(profile->comm, sizeof(profile->comm), comm);
+
     profile = profiles.lookup_or_try_init(&key, profile);
 
     return profile;
 }
 
 /* BPF programs below this line --------------------------------------------- */
+
+/* System call entrypoint */
+TRACEPOINT_PROBE(raw_syscalls, sys_enter)
+{
+    u32 pid = (u32)bpf_get_current_pid_tgid();
+    struct bpfbox_process *process = processes.lookup(&pid);
+
+    /* Get out if process does not exist */
+    if (!process)
+        return 0;
+
+    /* Lookup profile if it exists */
+    struct bpfbox_profile *profile = profiles.lookup(&process->profile_key);
+
+    /* FIXME: delete this block, just testing on the ls binary for now! */
+    char comm[16];
+    bpf_get_current_comm(comm, sizeof(comm));
+    /* Test enforcing on ls */
+    if (!bpf_strncmp("ls", comm, 3) && args->id == __NR_exit_group)
+        process->enforcing = true;
+
+    /* Process is enforcing */
+    if (process->enforcing && profile)
+    {
+        rules.call((struct pt_regs *)args, profile->tail_call_index);
+
+        /* Default deny */
+        bpf_send_signal(SIGKILL);
+    }
+
+    /* Process is not enforcing but has a profile */
+    if (profile)
+    {
+        entrypoints.call((struct pt_regs *)args, profile->tail_call_index);
+    }
+
+    return 0;
+}
 
 /* When a task forks */
 RAW_TRACEPOINT_PROBE(sched_process_fork)
@@ -65,7 +133,7 @@ RAW_TRACEPOINT_PROBE(sched_process_fork)
     process->enforcing = false;
     process->profile_key = 0;
 
-    /* Attempt to look up parent process */
+    /* Attempt to look up parent process if we know about it */
     parent_process = processes.lookup(&ppid);
     if (!parent_process)
     {
@@ -79,50 +147,38 @@ RAW_TRACEPOINT_PROBE(sched_process_fork)
 }
 
 /* When a task loads a program with execve */
-//RAW_TRACEPOINT_PROBE(sched_process_exec)
-//{
-//    u32 pid = ebpH_get_pid();
-//
-//    /* Look up process */
-//    struct ebpH_process *process = processes.lookup(&pid);
-//    if (!process)
-//    {
-//        return 0;
-//    }
-//
-//    /* Yoink the linux_binprm */
-//    struct linux_binprm *bprm = (struct linux_binprm *)ctx->args[2];
-//
-//    /* Calculate profile_key
-//     * Take inode number and filesystem device number together */
-//    u64 profile_key = (u64)bprm->file->f_path.dentry->d_inode->i_ino | ((u64)bprm->file->f_path.dentry->d_inode->i_rdev << 32);
-//
-//    /* Create profile if necessary */
-//    ebpH_create_profile(&profile_key, bprm->file->f_path.dentry->d_name.name, (struct pt_regs *)ctx);
-//
-//    /* Look up profile */
-//    struct ebpH_profile *profile = profiles.lookup(&profile_key);
-//    if (!profile)
-//    {
-//        EBPH_ERROR("sched_process_exec: Unable to lookup profile", (struct pt_regs *)ctx);
-//        return 0;
-//    }
-//
-//    /* Reset process' sequence stack */
-//    for (u32 i = 0; i < EBPH_SEQSTACK_SIZE; i++)
-//    {
-//        process->stack.seq[i].count = 0;
-//        for (u32 j = 0; j < EBPH_SEQLEN; j++)
-//        {
-//            process->stack.seq[i].seq[j] = EBPH_EMPTY;
-//        }
-//    }
-//
-//    /* Start tracing the process */
-//    ebpH_start_tracing(profile, process, (struct pt_regs *)ctx);
-//
-//    return 0;
-//}
+RAW_TRACEPOINT_PROBE(sched_process_exec)
+{
+    u32 pid = (u32)bpf_get_current_pid_tgid();
+    struct bpfbox_process *process = processes.lookup(&pid);
+
+    /* Get out if process does not exist */
+    if (!process)
+        return 0;
+
+    /* Yoink the linux_binprm */
+    struct linux_binprm *bprm = (struct linux_binprm *)ctx->args[2];
+
+    /* Calculate profile_key
+     * Take inode number and filesystem device number together */
+    u64 profile_key = (u64)bprm->file->f_path.dentry->d_inode->i_ino | ((u64)bprm->file->f_path.dentry->d_inode->i_rdev << 32);
+
+    /* Either lookup or create profile */
+    struct bpfbox_profile *profile = profiles.lookup(&profile_key);
+    if (!profile)
+    {
+        profile = create_profile(profile_key, bprm->file->f_path.dentry->d_name.name);
+    }
+    if (!profile)
+    {
+        // TODO: print error to logs here
+        return -1;
+    }
+
+    process->profile_key = profile_key;
+
+    return 0;
+}
 
 /* When a task exits */
 RAW_TRACEPOINT_PROBE(sched_process_exit)

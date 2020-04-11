@@ -80,6 +80,9 @@ class BPFBoxd:
         """
         Perform cleanup hooks before exit.
         """
+        # FIXME: delete this, for testing purposes
+        for profile in self.bpf['profiles'].values():
+            print(f'{profile.comm.decode("utf-8")} has tail call index {profile.tail_call_index}')
         self.bpf = None
 
     def loop_forever(self):
