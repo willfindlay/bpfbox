@@ -1,7 +1,9 @@
 import os, sys
 
-# Paths here
+# Path to project directory
 project_path = os.path.abspath(os.path.join(os.path.dirname(__file__), '..'))
+
+# Path to bpf program
 bpf_prog_path = os.path.join(project_path, 'bpfbox/bpf/bpf_program.c')
 
 # Time to sleep between daemon ticks in seconds

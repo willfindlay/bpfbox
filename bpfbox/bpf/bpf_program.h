@@ -23,9 +23,9 @@ struct bpfbox_process
 
 /* Helper functions definitions below this line ----------------------------- */
 
-static __always_inline struct bpfbox_process *create_process(u32 pid);
-static __always_inline struct bpfbox_profile *create_profile(u64 key, const char *comm);
+static __always_inline struct bpfbox_process *create_process(void *ctx, u32 pid);
+static __always_inline struct bpfbox_profile *create_profile(void *ctx, u64 key, const char *comm);
 
-static __always_inline int set_tail_index(struct bpfbox_profile *profile);
+static __always_inline int set_tail_index(void *ctx, struct bpfbox_profile *profile);
 
 #endif /* BPF_PROGRAM_H */

@@ -5,8 +5,9 @@ import time
 
 from bcc import BPF
 
+from bpfbox.rules import RulesDefinition
 from bpfbox import defs
-from bpfbox.daemon_mixin import DaemonMixin
+from bpfbox.daemon_mixin import DaemonMixin, DaemonNotRunningError
 
 signal.signal(signal.SIGTERM, lambda x,y: sys.exit(0))
 signal.signal(signal.SIGINT, lambda x,y: sys.exit(0))
@@ -33,8 +34,23 @@ class BPFBoxd(DaemonMixin):
         flags.append(f'-I{defs.project_path}')
         self.bpf = BPF(text=text, cflags=flags)
         atexit.register(self.cleanup)
+        self.register_perf_buffers()
+
+    def register_perf_buffers(self):
+        """
+        Define and register perf buffers.
+        """
+        # TODO/FIXME: This is probably NOT the way we want to create rules
+        #             Rather, rules should be auto-generated based on collected profiles
+        def on_profile_create(cpu, data, size):
+            event = self.bpf['on_profile_create'].event(data)
+            #RulesDefinition(self.bpf, event.tail_call_index)
+        self.bpf['on_profile_create'].open_perf_buffer(on_profile_create)
 
     def write_profile_data_to_disk(self):
+        """
+        Write all profile data to disk.
+        """
         pass
 
     def cleanup(self):
@@ -53,6 +69,7 @@ class BPFBoxd(DaemonMixin):
         """
         self.init_bpf()
         while 1:
+            self.bpf.perf_buffer_poll(30)
             time.sleep(self.ticksleep)
 
 def main(args):

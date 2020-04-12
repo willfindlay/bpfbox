@@ -9,6 +9,10 @@ BPF_ARRAY(__init_profile, struct bpfbox_profile, 1);
  * This counter is used to set the NEXT profile's tail_call_index. */
 BPF_ARRAY(__tail_call_index, int, 1);
 
+/* Perf buffers below this line --------------------------------------------- */
+
+BPF_PERF_OUTPUT(on_profile_create);
+
 /* Map definitions below this line ------------------------------------------ */
 
 /* This map holds information about currently running processes */
@@ -22,7 +26,8 @@ BPF_PROG_ARRAY(entrypoints, 10240);
 
 /* Helper functions below this line ----------------------------------------- */
 
-static __always_inline int set_tail_index(struct bpfbox_profile *profile)
+/* Assign a unique tail_index to a profile and increment the global counters */
+static __always_inline int set_tail_index(void *ctx, struct bpfbox_profile *profile)
 {
     int zero = 0;
     int *curr_idx = __tail_call_index.lookup(&zero);
@@ -39,7 +44,7 @@ static __always_inline int set_tail_index(struct bpfbox_profile *profile)
     return 0;
 }
 
-static __always_inline struct bpfbox_process *create_process(u32 pid)
+static __always_inline struct bpfbox_process *create_process(void *ctx, u32 pid)
 {
     int zero = 0;
     struct bpfbox_process *process = __init_process.lookup(&zero);
@@ -48,11 +53,13 @@ static __always_inline struct bpfbox_process *create_process(u32 pid)
         return NULL;
 
     process = processes.lookup_or_try_init(&pid, process);
+    if (!process)
+        return NULL;
 
     return process;
 }
 
-static __always_inline struct bpfbox_profile *create_profile(u64 key, const char *comm)
+static __always_inline struct bpfbox_profile *create_profile(void *ctx, u64 key, const char *comm)
 {
     int zero = 0;
     struct bpfbox_profile *profile = __init_profile.lookup(&zero);
@@ -61,10 +68,14 @@ static __always_inline struct bpfbox_profile *create_profile(u64 key, const char
         return NULL;
 
     /* Set tail call index */
-    set_tail_index(profile);
+    set_tail_index(ctx, profile);
     bpf_probe_read_str(profile->comm, sizeof(profile->comm), comm);
 
     profile = profiles.lookup_or_try_init(&key, profile);
+    if (!profile)
+        return NULL;
+
+    on_profile_create.perf_submit(ctx, profile, sizeof(*profile));
 
     return profile;
 }
@@ -122,7 +133,7 @@ RAW_TRACEPOINT_PROBE(sched_process_fork)
     u32 cpid = c->pid;
 
     /* Create the process */
-    process = create_process(cpid);
+    process = create_process(ctx, cpid);
     process = processes.lookup(&cpid);
     if (!process)
     {
@@ -167,7 +178,7 @@ RAW_TRACEPOINT_PROBE(sched_process_exec)
     struct bpfbox_profile *profile = profiles.lookup(&profile_key);
     if (!profile)
     {
-        profile = create_profile(profile_key, bprm->file->f_path.dentry->d_name.name);
+        profile = create_profile(ctx, profile_key, bprm->file->f_path.dentry->d_name.name);
     }
     if (!profile)
     {
@@ -186,5 +197,13 @@ RAW_TRACEPOINT_PROBE(sched_process_exit)
     u32 pid = (u32)bpf_get_current_pid_tgid();
     processes.delete(&pid);
 
+    return 0;
+}
+
+/* Uprobe attached to userspace load_profile function */
+int uprobe__load_profile(struct pt_regs *ctx)
+{
+    // TODO: write this
+    // FIXME: write userspace component and attach the two
     return 0;
 }
