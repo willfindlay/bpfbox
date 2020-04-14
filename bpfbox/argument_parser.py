@@ -21,6 +21,7 @@ def parse_args(sysargs=sys.argv[1:]):
             formatter_class=argparse.RawDescriptionHelpFormatter)
 
     # Setup arguments
+    # Operations
     operations = parser.add_argument_group('operations')
     operation = operations.add_mutually_exclusive_group()
     operation.add_argument('operation', choices=OPERATIONS, nargs='?',
@@ -28,6 +29,13 @@ def parse_args(sysargs=sys.argv[1:]):
     operation.add_argument('--nodaemon', action='store_true',
             help='Run as a foreground process instead of daemonizing. '
             'Required if not specifying an operation.')
+    # Enforcement options
+    enforcement = parser.add_argument_group('enforcement')
+    enforcement_mode = enforcement.add_mutually_exclusive_group()
+    enforcement_mode.add_argument('--enforcing', action='store_const', dest='enforcing', const=True, default=True,
+            help='Run in enforcing mode. Kill all enforcing processes that violate policy.')
+    enforcement_mode.add_argument('--permissive', action='store_const', dest='enforcing', const=False,
+            help='Run in permissive mode. Warn about enforcing processes that violate policy, but do not kill them.')
     # Miscellaneous options
     misc_options = parser.add_argument_group('misc. options')
 

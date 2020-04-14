@@ -2,6 +2,7 @@
 #define BPF_PROGRAM_H
 
 #include <linux/sched.h>
+#include <linux/kdev_t.h>
 #include <linux/fs.h>
 #include <linux/binfmts.h>
 #include <uapi/linux/ptrace.h>

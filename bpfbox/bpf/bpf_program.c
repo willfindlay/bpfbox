@@ -1,5 +1,6 @@
 #include "bpfbox/bpf/bpf_program.h"
 #include "bpfbox/bpf/helpers.h"
+#include "bpfbox/bpf/defs.h"
 
 /* Initializer arrays below this line --------------------------------------- */
 
@@ -19,10 +20,10 @@ BPF_PERF_OUTPUT(on_profile_create);
 BPF_TABLE("lru_hash", u32, struct bpfbox_process, processes, 10240);
 /* This map holds information about the profiles bpfbox currently knows about */
 BPF_TABLE("lru_hash", u64, struct bpfbox_profile, profiles, 10240);
-/* This map holds rules that will be tail called when an enforcing process makes a system call */
-BPF_PROG_ARRAY(rules, 10240);
-/* This map holds entrypoints that cause a process to start enforcing */
-BPF_PROG_ARRAY(entrypoints, 10240);
+///* This map holds rules that will be tail called when an enforcing process makes a system call */
+//BPF_PROG_ARRAY(rules, 10240);
+///* This map holds entrypoints that cause a process to start enforcing */
+//BPF_PROG_ARRAY(entrypoints, 10240);
 
 /* Helper functions below this line ----------------------------------------- */
 
@@ -80,6 +81,15 @@ static __always_inline struct bpfbox_profile *create_profile(void *ctx, u64 key,
     return profile;
 }
 
+static __always_inline int enforce(void *ctx, struct bpfbox_process *process, struct bpfbox_profile *profile, long syscall)
+{
+    #ifdef BPFBOX_ENFORCING
+    bpf_send_signal(SIGKILL);
+    #endif
+    bpf_trace_printk("Enforcement for %s on system call %ld\n", profile->comm, syscall);
+    return 0;
+}
+
 /* BPF programs below this line --------------------------------------------- */
 
 /* System call entrypoint */
@@ -95,26 +105,21 @@ TRACEPOINT_PROBE(raw_syscalls, sys_enter)
     /* Lookup profile if it exists */
     struct bpfbox_profile *profile = profiles.lookup(&process->profile_key);
 
-    /* FIXME: delete this block, just testing on the ls binary for now! */
-    char comm[16];
-    bpf_get_current_comm(comm, sizeof(comm));
-    /* Test enforcing on ls */
-    if (!bpf_strncmp("ls", comm, 3) && args->id == __NR_exit_group)
-        process->enforcing = true;
-
     /* Process is enforcing */
     if (process->enforcing && profile)
     {
-        rules.call((struct pt_regs *)args, profile->tail_call_index);
+        //rules.call((struct pt_regs *)args, profile->tail_call_index);
+        __BPFBOX_ACTION_RULES
 
         /* Default deny */
-        bpf_send_signal(SIGKILL);
+        enforce(args, process, profile, args->id);
     }
 
     /* Process is not enforcing but has a profile */
     if (profile)
     {
-        entrypoints.call((struct pt_regs *)args, profile->tail_call_index);
+        //entrypoints.call((struct pt_regs *)args, profile->tail_call_index);
+        __BPFBOX_START_ENFORCEMENT_RULES
     }
 
     return 0;
@@ -172,7 +177,7 @@ RAW_TRACEPOINT_PROBE(sched_process_exec)
 
     /* Calculate profile_key
      * Take inode number and filesystem device number together */
-    u64 profile_key = (u64)bprm->file->f_path.dentry->d_inode->i_ino | ((u64)bprm->file->f_path.dentry->d_inode->i_rdev << 32);
+    u64 profile_key = (u64)bprm->file->f_path.dentry->d_inode->i_ino | ((u64)new_encode_dev(bprm->file->f_path.dentry->d_inode->i_sb->s_dev) << 32);
 
     /* Either lookup or create profile */
     struct bpfbox_profile *profile = profiles.lookup(&profile_key);
