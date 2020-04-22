@@ -14,3 +14,11 @@ Exploring externally enforced sandboxing rules with eBPF
 - Start auto generating rules based on profiles
 - Figure out a way to generate semantic profiles, based on Inoue's work
     - https://www.cs.unm.edu/~forrest/dissertations/inoue-dissertation.pdf
+
+## Dynamic Sandboxing (Inoue)
+
+- original work looks at Java methods
+- can we do the same with system calls?
+    - perhaps it would be worth considering function calls too
+    - use eBPF to collect stack traces?
+    - but what to do about unresolved symbols?
