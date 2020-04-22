@@ -30,8 +30,19 @@ Exploring externally enforced sandboxing rules with eBPF
 - original work also looks at using Java permission model
 - we can do the same thing with eBPF
 - need to come up with a language to define rules
+- **the question:**
+    - *what kind of syntax/semantics to use for rules?*
+    - *how to generate rules?*
+- already know how to enforce rules:
     - compile these rules into eBPF programs
     - tail call these programs (bpfbox can already do this)
-- **the question:**
-    - *what kind of syntax to use for rules?*
-    - *what kind of semantics to use for rules?*
+
+#### What kind of syntax/semantics to use for rules?
+
+- maybe something like a function call syntax?
+    - operation(operands...)
+    - like read("/etc/passwd")
+
+#### How to generate rules?
+
+- when a profile is training, treat it as if it is enforcing and log the call
