@@ -15,10 +15,23 @@ Exploring externally enforced sandboxing rules with eBPF
 - Figure out a way to generate semantic profiles, based on Inoue's work
     - https://www.cs.unm.edu/~forrest/dissertations/inoue-dissertation.pdf
 
-## Dynamic Sandboxing (Inoue)
+## Dynamic Sandboxing
+
+### System Calls / Function Calls
 
 - original work looks at Java methods
 - can we do the same with system calls?
     - perhaps it would be worth considering function calls too
     - use eBPF to collect stack traces?
     - but what to do about unresolved symbols?
+
+### Java-Like Permission Model
+
+- original work also looks at using Java permission model
+- we can do the same thing with eBPF
+- need to come up with a language to define rules
+    - compile these rules into eBPF programs
+    - tail call these programs (bpfbox can already do this)
+- **the question:**
+    - *what kind of syntax to use for rules?*
+    - *what kind of semantics to use for rules?*
