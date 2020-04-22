@@ -1,9 +1,14 @@
-.PHONY: all, package, install
+.PHONY: all
+all: paper
 
-all: install
+.PHONY: paper
+paper:
+	$(MAKE) -C paper
 
+.PHONY: install
 install:
 	echo "Not yet implemented"
 
+.PHONY: package
 package:
 	pip3 install -e . -r requirements.txt
