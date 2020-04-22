@@ -2,30 +2,40 @@
 #include "bpfbox/bpf/helpers.h"
 #include "bpfbox/bpf/defs.h"
 
-/* Initializer arrays below this line --------------------------------------- */
+/* ========================================================================= *
+ * Initializer Arrays                                                        *
+ * ========================================================================= */
 
 BPF_ARRAY(__init_process, struct bpfbox_process, 1);
+
 BPF_ARRAY(__init_profile, struct bpfbox_profile, 1);
+
 /* A global counter that stores the tail call index for new profiles.
  * This counter is used to set the NEXT profile's tail_call_index. */
 BPF_ARRAY(__tail_call_index, int, 1);
 
-/* Perf buffers below this line --------------------------------------------- */
+/* ========================================================================= *
+ * Perf Buffers                                                              *
+ * ========================================================================= */
 
 BPF_PERF_OUTPUT(on_profile_create);
 
-/* Map definitions below this line ------------------------------------------ */
+/* ========================================================================= *
+ * Map Definitions                                                           *
+ * ========================================================================= */
 
 /* This map holds information about currently running processes */
 BPF_TABLE("lru_hash", u32, struct bpfbox_process, processes, 10240);
+
 /* This map holds information about the profiles bpfbox currently knows about */
 BPF_TABLE("lru_hash", u64, struct bpfbox_profile, profiles, 10240);
-///* This map holds rules that will be tail called when an enforcing process makes a system call */
-//BPF_PROG_ARRAY(rules, 10240);
-///* This map holds entrypoints that cause a process to start enforcing */
-//BPF_PROG_ARRAY(entrypoints, 10240);
 
-/* Helper functions below this line ----------------------------------------- */
+///* This map holds rules that will be tail called when an enforcing process makes a system call */
+BPF_PROG_ARRAY(rules, 10240);
+
+/* ========================================================================= *
+ * Helper Functions                                                          *
+ * ========================================================================= */
 
 /* Assign a unique tail_index to a profile and increment the global counters */
 static __always_inline int set_tail_index(void *ctx, struct bpfbox_profile *profile)
@@ -90,7 +100,9 @@ static __always_inline int enforce(void *ctx, struct bpfbox_process *process, st
     return 0;
 }
 
-/* BPF programs below this line --------------------------------------------- */
+/* ========================================================================= *
+ * BPF Programs                                                              *
+ * ========================================================================= */
 
 /* System call entrypoint */
 TRACEPOINT_PROBE(raw_syscalls, sys_enter)
@@ -108,18 +120,10 @@ TRACEPOINT_PROBE(raw_syscalls, sys_enter)
     /* Process is enforcing */
     if (process->enforcing && profile)
     {
-        //rules.call((struct pt_regs *)args, profile->tail_call_index);
-        __BPFBOX_ACTION_RULES
+        rules.call((struct pt_regs *)args, profile->tail_call_index);
 
         /* Default deny */
         enforce(args, process, profile, args->id);
-    }
-
-    /* Process is not enforcing but has a profile */
-    if (profile)
-    {
-        //entrypoints.call((struct pt_regs *)args, profile->tail_call_index);
-        __BPFBOX_START_ENFORCEMENT_RULES
     }
 
     return 0;
