@@ -64,3 +64,14 @@ def drop_privileges(function):
         os.setresuid(0, 0, -1)
         return ret
     return inner
+
+def read_chunks(f, size=1024):
+    """
+    Read a file in chunks.
+    Default chunk size is 1024.
+    """
+    while 1:
+        data = f.read(size)
+        if not data:
+            break
+        yield data

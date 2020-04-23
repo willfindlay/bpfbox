@@ -36,9 +36,18 @@ def parse_args(sysargs=sys.argv[1:]):
     enforcement_mode.add_argument('--enforcing', action='store_const', dest='enforcing', const=True, default=True,
             help='Run in enforcing mode. Kill all enforcing processes that violate policy.')
     enforcement_mode.add_argument('--permissive', action='store_const', dest='enforcing', const=False,
-            help='Run in permissive mode. Warn about enforcing processes that violate policy, but do not kill them.')
+            help='Run in permissive mode. Write violations to logs, but do not kill them.')
+    # Logging options
+    log_options = parser.add_argument_group('logging')
+    verbosity = log_options.add_mutually_exclusive_group()
+    verbosity.add_argument('--verbose', '-v', action='store_true',
+            help='Log in verbose mode.')
+    verbosity.add_argument('--debug', action='store_true',
+            help='Log in debug mode.')
+    log_options.add_argument('--stdout', action='store_true',
+            help='Write to terminal instead of log file.')
     # Miscellaneous options
-    misc_options = parser.add_argument_group('misc. options')
+    misc_options = parser.add_argument_group('misc.')
 
     # Parse arguments
     args = parser.parse_args(sysargs)

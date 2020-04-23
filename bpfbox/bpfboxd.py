@@ -96,7 +96,7 @@ def main(args):
     Main entrypoint for BPFBox daemon.
     Generally should be invoked with parse_args.
     """
-    defs.init()
+    defs.init(args)
     b = BPFBoxd(args)
 
     if args.nodaemon:

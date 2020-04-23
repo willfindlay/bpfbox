@@ -21,7 +21,7 @@ pidfile = '/var/run/bpfboxd.pid'
 # Path to logfile
 logfile = '/var/log/bpfbox/bpfbox.log'
 
-def init():
+def init(args):
     """
     Make sure things are setup properly.
     """
@@ -37,8 +37,8 @@ def init():
     except OSError:
         os.chmod(profiles_directory, mode=0o1700)
 
-    # Make logfile parent directory
-    os.makedirs(os.path.dirname(logfile), exist_ok=True)
+    from bpfbox.logger import setup_logger
+    setup_logger(args)
 
     # Make pidfile parent directory
     os.makedirs(os.path.dirname(pidfile), exist_ok=True)
