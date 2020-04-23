@@ -6,6 +6,9 @@ from daemon import DaemonContext, pidfile
 from bpfbox import defs
 from bpfbox.exceptions import DaemonNotRunningError
 
+from bpfbox.logger import get_logger
+logger = get_logger()
+
 class DaemonMixin:
     def loop_forever(self):
         raise NotImplementedError('Implement loop_forever(self) in the subclass.')
@@ -38,6 +41,8 @@ class DaemonMixin:
                 umask=0o022,
                 working_directory=defs.working_directory,
                 pidfile=pidfile.TimeoutPIDLockFile(defs.pidfile),
+                # Necessary to preserve logging
+                files_preserve=[handler.stream for handler in logger.handlers]
                 ):
             self.loop_forever()
 
