@@ -19,6 +19,7 @@ BPF_ARRAY(__tail_call_index, int, 1);
  * ========================================================================= */
 
 BPF_PERF_OUTPUT(on_profile_create);
+BPF_PERF_OUTPUT(on_enforcement);
 
 /* ========================================================================= *
  * Map Definitions                                                           *
@@ -67,6 +68,10 @@ static __always_inline struct bpfbox_process *create_process(void *ctx, u32 pid)
     if (!process)
         return NULL;
 
+    process->enforcing = 0;
+    process->profile_key = 0;
+    process->pid = pid;
+
     return process;
 }
 
@@ -96,7 +101,15 @@ static __always_inline int enforce(void *ctx, struct bpfbox_process *process, st
     #ifdef BPFBOX_ENFORCING
     bpf_send_signal(SIGKILL);
     #endif
-    bpf_trace_printk("Enforcement for %s on system call %ld\n", profile->comm, syscall);
+
+    struct enforcement_event event = {};
+
+    event.syscall = syscall;
+    event.pid = process->pid;
+    event.profile_key = process->profile_key;
+
+    on_enforcement.perf_submit(ctx, &event, sizeof(event));
+
     return 0;
 }
 
@@ -116,6 +129,13 @@ TRACEPOINT_PROBE(raw_syscalls, sys_enter)
 
     /* Lookup profile if it exists */
     struct bpfbox_profile *profile = profiles.lookup(&process->profile_key);
+
+     /* FIXME: delete this block, just testing on the ls binary for now! */
+    char comm[16];
+    bpf_get_current_comm(comm, sizeof(comm));
+    /* Test enforcing on ls */
+    if (!bpf_strncmp("ls", comm, 3) )//&& args->id == __NR_exit_group)
+        process->enforcing = 1;
 
     /* Process is enforcing */
     if (process->enforcing && profile)
@@ -149,9 +169,6 @@ RAW_TRACEPOINT_PROBE(sched_process_fork)
         /* TODO: print error to logs here */
         return -1;
     }
-
-    process->enforcing = false;
-    process->profile_key = 0;
 
     /* Attempt to look up parent process if we know about it */
     parent_process = processes.lookup(&ppid);

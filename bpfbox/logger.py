@@ -29,6 +29,8 @@ class BPFBoxLoggerClass(logging.getLoggerClass()):
         if self.isEnabledFor(BPFBoxLoggerClass.POLICY):
             self._log(BPFBoxLoggerClass.POLICY, msg, args, **kwargs)
 
+logging.setLoggerClass(BPFBoxLoggerClass)
+
 class BPFBoxRotatingFileHandler(handlers.TimedRotatingFileHandler):
     """
     Rotates log files either when they have reached the specified
@@ -83,7 +85,6 @@ def setup_logger(args):
     os.makedirs(os.path.dirname(defs.logfile), exist_ok=True)
 
     # Configure logging
-    logging.setLoggerClass(BPFBoxLoggerClass)
     formatter = logging.Formatter('[%(asctime)s] %(levelname)s: %(message)s')
     formatter.datefmt = '%Y-%m-%d %H:%M:%S'
 

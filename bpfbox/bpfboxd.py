@@ -2,11 +2,17 @@ import os, sys
 import atexit
 import signal
 import time
+import ctypes as ct
 
 from bcc import BPF
 
 from bpfbox import defs
 from bpfbox.daemon_mixin import DaemonMixin, DaemonNotRunningError
+from bpfbox.logger import get_logger
+from bpfbox.utils import syscall_name
+from bpfbox.bpf import structs
+
+logger = get_logger()
 
 signal.signal(signal.SIGTERM, lambda x,y: sys.exit(0))
 signal.signal(signal.SIGINT, lambda x,y: sys.exit(0))
@@ -49,6 +55,18 @@ class BPFBoxd(DaemonMixin):
         def on_profile_create(cpu, data, size):
             event = self.bpf['on_profile_create'].event(data)
         self.bpf['on_profile_create'].open_perf_buffer(on_profile_create)
+
+        # Policy enforcement event
+        def on_enforcement(cpu, data, size):
+            event = self.bpf['on_enforcement'].event(data)
+            enforcement = 'Enforcing' if self.enforcing else 'Would have enforced'
+            try:
+                profile = self.bpf['profiles'][ct.c_uint64(event.profile_key)]
+            except KeyError:
+                profile = structs.BPFBoxProfile()
+                profile.comm = b'UNKNOWN'
+            logger.policy(f'{enforcement} on {syscall_name(event.syscall)} in PID {event.pid} ({profile.comm.decode("utf-8")})')
+        self.bpf['on_enforcement'].open_perf_buffer(on_enforcement)
 
     def save_profiles(self):
         """

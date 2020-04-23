@@ -13,6 +13,14 @@
  * Datatypes                                                                 *
  * ========================================================================= */
 
+/* #####################################
+   #  WARNING WARNING WARNING WARNING  #
+   #                                   #
+   #  Keep in sync with structs.py     #
+   #                                   #
+   #  WARNING WARNING WARNING WARNING  #
+   ##################################### */
+
 struct bpfbox_path
 {
     char path[PATH_MAX];
@@ -26,7 +34,19 @@ struct bpfbox_profile
 
 struct bpfbox_process
 {
-    bool enforcing;
+    u32 pid;
+    u64 profile_key;
+    u8 enforcing;
+};
+
+/* ========================================================================= *
+ * Event Data                                                                *
+ * ========================================================================= */
+
+struct enforcement_event
+{
+    long syscall;
+    u32 pid;
     u64 profile_key;
 };
 
