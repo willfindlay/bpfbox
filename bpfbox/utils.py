@@ -9,12 +9,18 @@ __syscalls_reverse['pread64']  = __syscalls_reverse['pread']
 __syscalls_reverse['pwrite64'] = __syscalls_reverse['pwrite']
 
 def syscall_number(name):
+    """
+    Convert a system call name to a number. Case insensitive.
+    """
     try:
         return __syscalls_reverse[name.lower().strip()]
     except KeyError:
         return -1
 
 def syscall_name(num):
+    """
+    Convert a system call number to a name.
+    """
     try:
         return __syscalls[num]
     except KeyError:
