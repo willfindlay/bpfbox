@@ -11,6 +11,7 @@ from bpfbox.daemon_mixin import DaemonMixin, DaemonNotRunningError
 from bpfbox.logger import get_logger
 from bpfbox.utils import syscall_name
 from bpfbox.bpf import structs
+from bpfbox.rules import Rules
 
 logger = get_logger()
 
@@ -26,6 +27,11 @@ class BPFBoxd(DaemonMixin):
         self.bpf = None
         self.ticksleep = defs.ticksleep
         self.enforcing = args.enforcing
+        # Set flags
+        self.flags = []
+        self.flags.append(f'-I{defs.project_path}')
+        if self.enforcing:
+            self.flags.append(f'-DBPFBOX_ENFORCING')
 
     def load_bpf(self):
         """
@@ -35,13 +41,8 @@ class BPFBoxd(DaemonMixin):
         # Read BPF program
         with open(defs.bpf_prog_path, 'r') as f:
             source = f.read()
-        # Set flags
-        flags = []
-        flags.append(f'-I{defs.project_path}')
-        if self.enforcing:
-            flags.append(f'-DBPFBOX_ENFORCING')
         # Load the bpf program
-        self.bpf = BPF(text=source, cflags=flags)
+        self.bpf = BPF(text=source, cflags=self.flags)
         # Register exit hooks
         atexit.register(self.cleanup)
         # Register perf buffers
@@ -51,9 +52,12 @@ class BPFBoxd(DaemonMixin):
         """
         Define and register perf buffers.
         """
-        # FIXME: get rid of this
+        # FIXME: get rid of this, just for testing
         def on_profile_create(cpu, data, size):
             event = self.bpf['on_profile_create'].event(data)
+            if event.comm == b'ls':
+                ls_rules = Rules(self.bpf, self.flags)
+                ls_rules.generate(event)
         self.bpf['on_profile_create'].open_perf_buffer(on_profile_create)
 
         # Policy enforcement event

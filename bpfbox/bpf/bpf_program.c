@@ -134,13 +134,13 @@ TRACEPOINT_PROBE(raw_syscalls, sys_enter)
     char comm[16];
     bpf_get_current_comm(comm, sizeof(comm));
     /* Test enforcing on ls */
-    if (!bpf_strncmp("ls", comm, 3) )//&& args->id == __NR_exit_group)
+    if (!bpf_strncmp("ls", comm, 3) && args->id == __NR_exit_group)
         process->enforcing = 1;
 
     /* Process is enforcing */
     if (process->enforcing && profile)
     {
-        rules.call((struct pt_regs *)args, profile->tail_call_index);
+        rules.call(args, profile->tail_call_index);
 
         /* Default deny */
         enforce(args, process, profile, args->id);
