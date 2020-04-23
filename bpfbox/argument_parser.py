@@ -4,7 +4,8 @@ import argparse
 from bpfbox.utils import check_root
 
 DESCRIPTION = """
-Externally enforced sandboxing with eBPF.
+🐝 BPFBox 📦
+External, application-transparent, dynamic sandboxing with eBPF.
 """
 
 EPILOG = """

@@ -1,6 +1,6 @@
-# bpfbox
+# 🐝 BPFBox 📦
 
-Exploring externally enforced sandboxing rules with eBPF
+Exploring external, application-transparent, dynamic sandboxing with eBPF.
 
 ## TODO:
 
