@@ -45,7 +45,7 @@ def parse_args(sysargs=sys.argv[1:]):
     verbosity.add_argument('--debug', action='store_true',
             help='Log in debug mode.')
     log_options.add_argument('--stdout', action='store_true',
-            help='Write to terminal instead of log file.')
+            help='Write to terminal instead of log file. Only makes sense when running with --nodaemon.')
     # Miscellaneous options
     misc_options = parser.add_argument_group('misc.')
 
@@ -59,5 +59,9 @@ def parse_args(sysargs=sys.argv[1:]):
     # Check for either --nodaemon or an operation
     if not args.operation and not args.nodaemon:
         parser.error(f'You must specify either --nodaemon or an operation.')
+
+    # Check for --stdout with --nodaemon
+    if args.stdout and not args.nodaemon:
+        parser.error(f'Option --stdout only makes sense with --nodaemon.')
 
     return args
