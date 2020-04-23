@@ -12,6 +12,9 @@ ticksleep = 0.1
 # Path to working directory
 working_directory = '/var/lib/bpfbox'
 
+# Path to profiles directory
+profiles_directory = os.path.join(working_directory, 'profiles')
+
 # Path to pidfile
 pidfile = '/var/run/bpfboxd.pid'
 
@@ -22,12 +25,20 @@ def init():
     """
     Make sure things are setup properly.
     """
-    # Make logfile parent directory
-    os.makedirs(os.path.dirname(logfile), exist_ok=True)
-    # Make pidfile parent directory
-    os.makedirs(os.path.dirname(pidfile), exist_ok=True)
     # Make working_directory or set permissions of existing working_directory
     try:
         os.makedirs(working_directory, mode=0o1700, exist_ok=True)
     except OSError:
         os.chmod(working_directory, mode=0o1700)
+
+    # Make profiles_directory or set permissions of existing profiles_directory
+    try:
+        os.makedirs(profiles_directory, mode=0o1700, exist_ok=True)
+    except OSError:
+        os.chmod(profiles_directory, mode=0o1700)
+
+    # Make logfile parent directory
+    os.makedirs(os.path.dirname(logfile), exist_ok=True)
+
+    # Make pidfile parent directory
+    os.makedirs(os.path.dirname(pidfile), exist_ok=True)

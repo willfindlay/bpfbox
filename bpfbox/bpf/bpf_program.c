@@ -30,7 +30,7 @@ BPF_TABLE("lru_hash", u32, struct bpfbox_process, processes, 10240);
 /* This map holds information about the profiles bpfbox currently knows about */
 BPF_TABLE("lru_hash", u64, struct bpfbox_profile, profiles, 10240);
 
-///* This map holds rules that will be tail called when an enforcing process makes a system call */
+/* This map holds rules that will be tail called when an enforcing process makes a system call */
 BPF_PROG_ARRAY(rules, 10240);
 
 /* ========================================================================= *
