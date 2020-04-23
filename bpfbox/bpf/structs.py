@@ -13,7 +13,7 @@ PATH_MAX = 4096
 # TODO: read this from linux/sched.h instead
 TASK_COMM_LEN = 16
 
-class BPFBoxPath(ct.Structure):
+class BPFBoxPathStruct(ct.Structure):
     """
     struct bpfbox_path
     """
@@ -21,7 +21,7 @@ class BPFBoxPath(ct.Structure):
             ('path', ct.c_char * PATH_MAX),
             ]
 
-class BPFBoxProfile(ct.Structure):
+class BPFBoxProfileStruct(ct.Structure):
     """
     struct bpfbox_profile
     """
@@ -30,7 +30,7 @@ class BPFBoxProfile(ct.Structure):
             ('comm', ct.c_char * TASK_COMM_LEN),
             ]
 
-class BPFBoxProcess(ct.Structure):
+class BPFBoxProcessStruct(ct.Structure):
     """
     struct bpfbox_process
     """

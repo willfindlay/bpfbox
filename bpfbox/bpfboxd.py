@@ -67,7 +67,7 @@ class BPFBoxd(DaemonMixin):
             try:
                 profile = self.bpf['profiles'][ct.c_uint64(event.profile_key)]
             except KeyError:
-                profile = structs.BPFBoxProfile()
+                profile = structs.BPFBoxProfileStruct()
                 profile.comm = b'UNKNOWN'
             logger.policy(f'{enforcement} on {syscall_name(event.syscall)} in PID {event.pid} ({profile.comm.decode("utf-8")})')
         self.bpf['on_enforcement'].open_perf_buffer(on_enforcement)
@@ -94,13 +94,18 @@ class BPFBoxd(DaemonMixin):
         Load one profile's data from disk.
         """
 
+    def dump_debug_data(self):
+        import logging
+        if not logger.level == logging.DEBUG:
+            return
+        for profile in sorted(self.bpf['profiles'].values(), key=lambda p: p.tail_call_index):
+            logger.debug(f'{profile.comm.decode("utf-8")} has tail call index {profile.tail_call_index}')
+
     def cleanup(self):
         """
         Perform cleanup hooks before exit.
         """
-        # FIXME: delete this, for testing purposes
-        for profile in sorted(self.bpf['profiles'].values(), key=lambda p: p.tail_call_index):
-            print(f'{profile.comm.decode("utf-8")} has tail call index {profile.tail_call_index}')
+        self.dump_debug_data()
         self.save_profiles()
         self.bpf = None
 
