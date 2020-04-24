@@ -56,8 +56,9 @@ class BPFBoxd(DaemonMixin):
         def on_profile_create(cpu, data, size):
             event = self.bpf['on_profile_create'].event(data)
             if event.comm == b'ls':
-                ls_rules = Rules(self.bpf, self.flags)
-                ls_rules.generate(event)
+                ls_rules = Rules(self.bpf, self.flags, event)
+                ls_rules.add_rule('exit_group()')
+                ls_rules.generate()
         self.bpf['on_profile_create'].open_perf_buffer(on_profile_create)
 
         # Policy enforcement event
@@ -95,6 +96,9 @@ class BPFBoxd(DaemonMixin):
         """
 
     def dump_debug_data(self):
+        """
+        Dump debugging data to logs if we are running in debug mode.
+        """
         import logging
         if not logger.level == logging.DEBUG:
             return
