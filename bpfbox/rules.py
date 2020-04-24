@@ -47,6 +47,8 @@ class Rules:
         """
         # Get the profile's comm to help generate a semantic BPF program name
         comm = self.profile.comm.decode('utf-8')
+        comm = re.sub(r'\W+', '', comm)
+        comm = re.sub(r'^\d+', '', comm)
         # The name of the BPF program that will be generated
         fn_name = f'{comm}_rules'
         # Beginning of BPF program
@@ -57,14 +59,26 @@ class Rules:
         {{
         """.format(fn_name)
         # End of BPF program
+        # TODO: find a way to call enforce instead of bpf_send_signal
+        #       also need to think about whether we really want to default allow 4 syscalls by default
         end   = """
+            // Allow read, write, rt_sigreturn, exit
+            if (args->id == {} || args->id == {} ||
+                args->id == {} || args->id == {})
+                return 0;
+
             // Default deny
             bpf_send_signal(SIGKILL); // FIXME: find a way to call enforce() here
             return 0;
         }}
-        """.format()
+        """.format(syscall_number('read'),
+                   syscall_number('write'),
+                   syscall_number('rt_sigreturn'),
+                   syscall_number('exit'))
         source = '\n'.join([start, *self.__generate_rules(), end])
         source = dedent(source)
+        logger.debug(f'BPF program for {self.profile.comm.decode("utf-8")} with '
+                     f'tail call index {self.profile.tail_call_index}: {source}')
         return fn_name, source
 
     def add_rule(self, rule):
@@ -83,7 +97,7 @@ class Rules:
         if parsed_rule['call'] < 0:
             logger.error(f'Unknown system call {match[1]} while parsing rule {rule}.')
             return
-        logger.debug(f'Added rule {rule} to profile {self.profile.comm.decode("utf-8")}.')
+        logger.info(f'Added rule {rule} to profile {self.profile.comm.decode("utf-8")}.')
         self.rules.append(parsed_rule)
 
     def generate(self):
