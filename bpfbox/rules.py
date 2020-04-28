@@ -1,3 +1,4 @@
+import os, sys
 from textwrap import dedent
 import ctypes as ct
 import re
@@ -7,6 +8,7 @@ from bcc import BPF
 from bpfbox.bpf import structs
 from bpfbox.logger import get_logger
 from bpfbox.utils import syscall_number
+from bpfbox import defs
 
 logger = get_logger()
 
@@ -55,9 +57,11 @@ class Rules:
         start = """
         #include <linux/sched.h>
 
+        BPF_TABLE_PINNED("perf_output", int, u32, on_enforcement, 1024, "{}");
+
         int {}(struct tracepoint__raw_syscalls__sys_enter *args)
         {{
-        """.format(fn_name)
+        """.format(os.path.join(defs.bpffs, 'on_enforcement'), fn_name)
         # End of BPF program
         # TODO: find a way to call enforce instead of bpf_send_signal
         #       also need to think about whether we really want to default allow 4 syscalls by default
@@ -68,7 +72,11 @@ class Rules:
                 return 0;
 
             // Default deny
-            bpf_send_signal(SIGKILL); // FIXME: find a way to call enforce() here
+            //bpf_send_signal(SIGKILL); // FIXME: find a way to call enforce() here
+
+            int event = 0;
+
+            on_enforcement.perf_submit(args, &event, sizeof(event));
             return 0;
         }}
         """.format(syscall_number('read'),

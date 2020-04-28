@@ -21,6 +21,9 @@ pidfile = '/var/run/bpfboxd.pid'
 # Path to logfile
 logfile = '/var/log/bpfbox/bpfbox.log'
 
+# Path to bpffs
+bpffs = '/sys/fs/bpf'
+
 def init(args):
     """
     Make sure things are setup properly.

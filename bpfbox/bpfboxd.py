@@ -5,6 +5,7 @@ import time
 import ctypes as ct
 
 from bcc import BPF
+from bcc.libbcc import lib
 
 from bpfbox import defs
 from bpfbox.daemon_mixin import DaemonMixin, DaemonNotRunningError
@@ -47,6 +48,7 @@ class BPFBoxd(DaemonMixin):
         atexit.register(self.cleanup)
         # Register perf buffers
         self.register_perf_buffers()
+        self.pin_map('on_enforcement')
 
     def register_perf_buffers(self):
         """
@@ -57,7 +59,7 @@ class BPFBoxd(DaemonMixin):
             event = self.bpf['on_profile_create'].event(data)
             if event.comm == b'ls':
                 ls_rules = Rules(self.bpf, self.flags, event)
-                ls_rules.add_rule('exit_group()')
+                #ls_rules.add_rule('exit_group()')
                 ls_rules.generate()
         self.bpf['on_profile_create'].open_perf_buffer(on_profile_create)
 
@@ -72,6 +74,20 @@ class BPFBoxd(DaemonMixin):
                 profile.comm = b'UNKNOWN'
             logger.policy(f'{enforcement} on {syscall_name(event.syscall)} in PID {event.pid} ({profile.comm.decode("utf-8")})')
         self.bpf['on_enforcement'].open_perf_buffer(on_enforcement)
+
+    def pin_map(self, name):
+        """
+        Pin a map to sysfs so that they can be accessed from the tail called programs.
+        """
+        fn = os.path.join(defs.bpffs, name)
+        # remove filename before trying to pin
+        if os.path.exists(fn):
+            os.unlink(fn)
+
+        # pin the map
+        ret = lib.bpf_obj_pin(self.bpf[name].map_fd, fn.encode('utf-8'))
+        if ret:
+            logger.error(f"Could not pin map {name}: {os.strerror(ct.get_errno())}")
 
     def save_profiles(self):
         """
