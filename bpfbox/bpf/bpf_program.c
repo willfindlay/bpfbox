@@ -20,19 +20,28 @@ BPF_TABLE("lru_hash", u32, struct bpfbox_process, processes, BPFBOX_MAX_PROCESSE
 /* This map holds information about the profiles bpfbox currently knows about */
 BPF_TABLE("lru_hash", u64, struct bpfbox_profile, profiles, BPFBOX_MAX_PROFILES);
 
-/* This map holds rules that will be tail called on events */
-BPF_PROG_ARRAY(policy, BPFBOX_MAX_PROFILES);
+/* This map holds rules that will be tail called on fs policy events */
+BPF_PROG_ARRAY(fs_policy, BPFBOX_MAX_PROFILES);
+
+/* ========================================================================= *
+ * Intermediate Maps                                                         *
+ * ========================================================================= */
+
+/* This array holds intermediate values between entry and exit points to
+ * do_filp_open */
+BPF_ARRAY(__do_filp_open_intermediate, struct open_flags, 1);
 
 /* ========================================================================= *
  * Helper Functions                                                          *
  * ========================================================================= */
 
-static __always_inline struct bpfbox_process *create_process(void *ctx, u32 pid)
+static __always_inline
+struct bpfbox_process *create_process(void *ctx, u32 pid, u32 tid)
 {
     int zero = 0;
     struct bpfbox_process process = {};
 
-    process.enforcing = 0;
+    process.tainted = 0;
     process.profile_key = 0;
     process.pid = pid;
     process.tid = tid;
@@ -40,8 +49,9 @@ static __always_inline struct bpfbox_process *create_process(void *ctx, u32 pid)
     return processes.lookup_or_try_init(&pid, &process);
 }
 
-static __always_inline int enforce(void *ctx, struct bpfbox_process *process,
-        struct bpfbox_profile *profile, long syscall)
+static __always_inline
+int enforce(void *ctx, struct bpfbox_process *process,
+    struct bpfbox_profile *profile)
 {
     #ifdef BPFBOX_ENFORCING
     bpf_send_signal(SIGKILL);
@@ -49,7 +59,6 @@ static __always_inline int enforce(void *ctx, struct bpfbox_process *process,
 
     struct enforcement_event event = {};
 
-    event.syscall = syscall;
     event.pid = process->pid;
     event.tid = process->tid;
     event.profile_key = process->profile_key;
@@ -118,7 +127,7 @@ RAW_TRACEPOINT_PROBE(sched_process_exec)
     u64 profile_key = (u64)bprm->file->f_path.dentry->d_inode->i_ino
         | ((u64)new_encode_dev(bprm->file->f_path.dentry->d_inode->i_sb->s_dev) << 32);
 
-    // Either lookup or create profile
+    // Look up the profile if it exists
     struct bpfbox_profile *profile = profiles.lookup(&profile_key);
     if (!profile)
     {
@@ -135,6 +144,47 @@ RAW_TRACEPOINT_PROBE(sched_process_exit)
 {
     u32 pid = (u32)bpf_get_current_pid_tgid();
     processes.delete(&pid);
+
+    return 0;
+}
+
+/* A kprobe that checks the arguments to do_filp_open
+ * (underlying implementation of open, openat, and openat2). */
+int kprobe__do_filp_open(struct pt_regs *ctx, int dfd,
+        struct filename *pathname, const struct open_flags *op)
+{
+    // Check pid and lookup process if it exists
+    u32 pid = bpf_get_current_pid_tgid();
+    struct bpfbox_process *process = processes.lookup(&pid);
+    if (!process)
+        return 0;
+
+    int zero = 0;
+    struct open_flags tmp;
+    bpf_probe_read(&tmp, sizeof(tmp), op);
+
+    __do_filp_open_intermediate.update(&zero, &tmp);
+
+    return 0;
+}
+
+/* A kretprobe that checks the file struct pointer returned
+ * by do_filp_open (underlying implementation of open, openat,
+ * and openat2). */
+int kretprobe__do_filp_open(struct pt_regs *ctx)
+{
+    // Check pid and lookup process if it exists
+    u32 pid = bpf_get_current_pid_tgid();
+    struct bpfbox_process *process = processes.lookup(&pid);
+    if (!process)
+        return 0;
+
+    // Look up profile
+    struct bpfbox_profile *profile = profiles.lookup(&process->profile_key);
+    if (!profile)
+        return 0;
+
+    fs_policy.call(ctx, profile->tail_call_index);
 
     return 0;
 }

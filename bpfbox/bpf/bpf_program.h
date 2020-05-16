@@ -54,7 +54,7 @@ struct bpfbox_process
     u32 pid;
     u32 tid;
     u64 profile_key;
-    u8 enforcing;
+    u8 tainted;
 };
 
 /* ========================================================================= *
@@ -63,7 +63,6 @@ struct bpfbox_process
 
 struct enforcement_event
 {
-    long syscall;
     u32 pid;
     u32 tid;
     u64 profile_key;
@@ -72,8 +71,5 @@ struct enforcement_event
 /* ========================================================================= *
  * Function Declarations                                                     *
  * ========================================================================= */
-
-static __always_inline
-    struct bpfbox_process *create_process(void *ctx, u32 pid);
 
 #endif /* BPF_PROGRAM_H */
