@@ -60,7 +60,7 @@ int enforce(void *ctx, struct bpfbox_process *process,
     struct enforcement_event event = {};
 
     event.pid = process->pid;
-    event.tid = process->tid;
+    event.tgid = process->tgid;
     event.profile_key = process->profile_key;
 
     #ifdef BPFBOX_ENFORCING
@@ -90,7 +90,7 @@ RAW_TRACEPOINT_PROBE(sched_process_fork)
     u32 ctgid = c->tgid;
 
     // Create the process
-    process = create_process(ctx, cpid);
+    process = create_process(ctx, cpid, ctgid);
     if (!process)
     {
         // TODO: print error to logs here
