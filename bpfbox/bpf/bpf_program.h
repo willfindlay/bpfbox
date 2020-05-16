@@ -76,7 +76,4 @@ struct enforcement_event
 static __always_inline
     struct bpfbox_process *create_process(void *ctx, u32 pid);
 
-static __always_inline
-    struct bpfbox_profile *create_profile(void *ctx,u64 key, const char *comm);
-
 #endif /* BPF_PROGRAM_H */

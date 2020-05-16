@@ -77,22 +77,35 @@ class BPFBoxd(DaemonMixin):
         """
         Define and register perf buffers.
         """
-        # Policy enforcement event
+        # enforce() called while enforcing
         def on_enforcement(cpu, data, size):
             event = self.bpf['on_enforcement'].event(data)
-            enforcement = (
-                'Enforcing' if self.enforcing else 'Would have enforced'
-            )
             try:
                 profile = self.bpf['profiles'][ct.c_uint64(event.profile_key)]
             except KeyError:
-                profile = structs.BPFBoxProfileStruct()
-                profile.comm = b'UNKNOWN'
+                return
             logger.policy(
-                f'{enforcement} on {syscall_name(event.syscall)} in PID {event.pid} ({profile.comm.decode("utf-8")})'
+                f'Enforcing on {syscall_name(event.syscall)} in PID '
+                f'{event.pid} TID {event.tid} ({profile.comm.decode("utf-8")})'
             )
 
         self.bpf['on_enforcement'].open_perf_buffer(on_enforcement)
+
+        # enforce() called while permissive
+        def on_would_have_enforced(cpu, data, size):
+            event = self.bpf['on_would_have_enforced'].event(data)
+            try:
+                profile = self.bpf['profiles'][ct.c_uint64(event.profile_key)]
+            except KeyError:
+                return
+            logger.policy(
+                f'Would have enforced on {syscall_name(event.syscall)} in PID '
+                f'{event.pid} TID {event.tid} ({profile.comm.decode("utf-8")})'
+            )
+
+        self.bpf['on_would_have_enforced'].open_perf_buffer(
+            on_would_have_enforced
+        )
 
     def pin_map(self, name):
         """
@@ -143,12 +156,14 @@ class BPFBoxd(DaemonMixin):
             return
 
         # Dump profiles TODO
+        logger.debug('Dumping profiles...')
         for key, profile in self.bpf['profiles'].iteritems():
-            pass
+            logger.debug(key)
 
         # Dump processes TODO
+        logger.debug('Dumping processes...')
         for key, process in self.bpf['processes'].iteritems():
-            pass
+            logger.debug(key)
 
     def cleanup(self):
         """
