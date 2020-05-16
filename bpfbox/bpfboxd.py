@@ -80,27 +80,15 @@ class BPFBoxd(DaemonMixin):
         # enforce() called while enforcing
         def on_enforcement(cpu, data, size):
             event = self.bpf['on_enforcement'].event(data)
-            try:
-                profile = self.bpf['profiles'][ct.c_uint64(event.profile_key)]
-            except KeyError:
-                return
-            logger.policy(
-                f'Enforcing on {syscall_name(event.syscall)} in PID '
-                f'{event.pid} TID {event.tid} ({profile.comm.decode("utf-8")})'
-            )
+            logger.policy(f'Enforcing in PID {event.pid} TID {event.tid}')
 
         self.bpf['on_enforcement'].open_perf_buffer(on_enforcement)
 
         # enforce() called while permissive
         def on_would_have_enforced(cpu, data, size):
             event = self.bpf['on_would_have_enforced'].event(data)
-            try:
-                profile = self.bpf['profiles'][ct.c_uint64(event.profile_key)]
-            except KeyError:
-                return
             logger.policy(
-                f'Would have enforced on {syscall_name(event.syscall)} in PID '
-                f'{event.pid} TID {event.tid} ({profile.comm.decode("utf-8")})'
+                f'Would have enforced in PID {event.pid} TID {event.tid}'
             )
 
         self.bpf['on_would_have_enforced'].open_perf_buffer(
