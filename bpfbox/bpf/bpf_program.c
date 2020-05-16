@@ -15,13 +15,13 @@ BPF_PERF_OUTPUT(on_would_have_enforced);
  * ========================================================================= */
 
 /* This map holds information about currently running processes */
-BPF_TABLE("lru_hash", u32, struct bpfbox_process, processes, 10240);
+BPF_TABLE("lru_hash", u32, struct bpfbox_process, processes, BPFBOX_MAX_PROCESSES);
 
 /* This map holds information about the profiles bpfbox currently knows about */
-BPF_TABLE("lru_hash", u64, struct bpfbox_profile, profiles, 10240);
+BPF_TABLE("lru_hash", u64, struct bpfbox_profile, profiles, BPFBOX_MAX_PROFILES);
 
-/* This map holds rules that will be tail called when an enforcing process makes a system call */
-BPF_PROG_ARRAY(rules, 10240);
+/* This map holds rules that will be tail called on events */
+BPF_PROG_ARRAY(policy, BPFBOX_MAX_PROFILES);
 
 /* ========================================================================= *
  * Helper Functions                                                          *
