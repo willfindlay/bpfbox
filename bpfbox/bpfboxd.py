@@ -16,14 +16,16 @@ from bpfbox.rules import Rules
 
 logger = get_logger()
 
-signal.signal(signal.SIGTERM, lambda x,y: sys.exit(0))
-signal.signal(signal.SIGINT, lambda x,y: sys.exit(0))
+signal.signal(signal.SIGTERM, lambda x, y: sys.exit(0))
+signal.signal(signal.SIGINT, lambda x, y: sys.exit(0))
+
 
 class BPFBoxd(DaemonMixin):
     """
     BPFBox's daemon class.
     Manages BPF programs and reads events in an event loop.
     """
+
     def __init__(self, args):
         self.bpf = None
         self.ticksleep = defs.ticksleep
@@ -59,20 +61,26 @@ class BPFBoxd(DaemonMixin):
             event = self.bpf['on_profile_create'].event(data)
             if event.comm == b'ls':
                 ls_rules = Rules(self.bpf, self.flags, event)
-                #ls_rules.add_rule('exit_group()')
+                # ls_rules.add_rule('exit_group()')
                 ls_rules.generate()
+
         self.bpf['on_profile_create'].open_perf_buffer(on_profile_create)
 
         # Policy enforcement event
         def on_enforcement(cpu, data, size):
             event = self.bpf['on_enforcement'].event(data)
-            enforcement = 'Enforcing' if self.enforcing else 'Would have enforced'
+            enforcement = (
+                'Enforcing' if self.enforcing else 'Would have enforced'
+            )
             try:
                 profile = self.bpf['profiles'][ct.c_uint64(event.profile_key)]
             except KeyError:
                 profile = structs.BPFBoxProfileStruct()
                 profile.comm = b'UNKNOWN'
-            logger.policy(f'{enforcement} on {syscall_name(event.syscall)} in PID {event.pid} ({profile.comm.decode("utf-8")})')
+            logger.policy(
+                f'{enforcement} on {syscall_name(event.syscall)} in PID {event.pid} ({profile.comm.decode("utf-8")})'
+            )
+
         self.bpf['on_enforcement'].open_perf_buffer(on_enforcement)
 
     def pin_map(self, name):
@@ -87,7 +95,9 @@ class BPFBoxd(DaemonMixin):
         # pin the map
         ret = lib.bpf_obj_pin(self.bpf[name].map_fd, fn.encode('utf-8'))
         if ret:
-            logger.error(f"Could not pin map {name}: {os.strerror(ct.get_errno())}")
+            logger.error(
+                f"Could not pin map {name}: {os.strerror(ct.get_errno())}"
+            )
 
     def save_profiles(self):
         """
@@ -116,10 +126,15 @@ class BPFBoxd(DaemonMixin):
         Dump debugging data to logs if we are running in debug mode.
         """
         import logging
+
         if not logger.level == logging.DEBUG:
             return
-        for profile in sorted(self.bpf['profiles'].values(), key=lambda p: p.tail_call_index):
-            logger.debug(f'{profile.comm.decode("utf-8")} has tail call index {profile.tail_call_index}')
+        for profile in sorted(
+            self.bpf['profiles'].values(), key=lambda p: p.tail_call_index
+        ):
+            logger.debug(
+                f'{profile.comm.decode("utf-8")} has tail call index {profile.tail_call_index}'
+            )
 
     def cleanup(self):
         """
@@ -137,6 +152,7 @@ class BPFBoxd(DaemonMixin):
         while 1:
             self.bpf.perf_buffer_poll(30)
             time.sleep(self.ticksleep)
+
 
 def main(args):
     """
@@ -157,7 +173,10 @@ def main(args):
         try:
             b.stop_daemon()
         except DaemonNotRunningError:
-            print('pidfile for bpfboxd is empty. If the daemon is still running, '
-                  'you may need to kill manually.', file=sys.stderr)
+            print(
+                'pidfile for bpfboxd is empty. If the daemon is still running, '
+                'you may need to kill manually.',
+                file=sys.stderr,
+            )
     if args.operation == 'restart':
         b.restart_daemon()

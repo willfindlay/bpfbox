@@ -10,10 +10,12 @@ from logging import handlers as handlers
 from bpfbox.utils import read_chunks
 from bpfbox import defs
 
+
 class BPFBoxLoggerClass(logging.getLoggerClass()):
     """
     Custom logger class that allows for the logging of policy messages.
     """
+
     POLICY = logging.WARN - 5
 
     def __init__(self, name, level=logging.NOTSET):
@@ -29,7 +31,9 @@ class BPFBoxLoggerClass(logging.getLoggerClass()):
         if self.isEnabledFor(BPFBoxLoggerClass.POLICY):
             self._log(BPFBoxLoggerClass.POLICY, msg, args, **kwargs)
 
+
 logging.setLoggerClass(BPFBoxLoggerClass)
+
 
 class BPFBoxRotatingFileHandler(handlers.TimedRotatingFileHandler):
     """
@@ -39,10 +43,21 @@ class BPFBoxRotatingFileHandler(handlers.TimedRotatingFileHandler):
 
     This class uses camel casing because that's what the logging module uses.
     """
-    def __init__(self, filename, maxBytes=0, backupCount=0, encoding=None,
-            delay=0, when='h', interval=1, utc=False):
-        handlers.TimedRotatingFileHandler.__init__(self, filename, when,
-                interval, backupCount, encoding, delay, utc)
+
+    def __init__(
+        self,
+        filename,
+        maxBytes=0,
+        backupCount=0,
+        encoding=None,
+        delay=0,
+        when='h',
+        interval=1,
+        utc=False,
+    ):
+        handlers.TimedRotatingFileHandler.__init__(
+            self, filename, when, interval, backupCount, encoding, delay, utc
+        )
         self.maxBytes = maxBytes
         self.suffix = "%Y-%m-%d_%H-%M-%S"
 
@@ -52,7 +67,7 @@ class BPFBoxRotatingFileHandler(handlers.TimedRotatingFileHandler):
                 os.unlink(dest)
             except FileNotFoundError:
                 pass
-            with open(source, 'r') as sf, gzip.open(dest ,'ab') as df:
+            with open(source, 'r') as sf, gzip.open(dest, 'ab') as df:
                 for chunk in read_chunks(sf):
                     df.write(chunk.encode('utf-8'))
             try:
@@ -60,7 +75,7 @@ class BPFBoxRotatingFileHandler(handlers.TimedRotatingFileHandler):
             except FileNotFoundError:
                 pass
 
-        self.rotator=rotator
+        self.rotator = rotator
 
     def shouldRollover(self, record):
         """
@@ -79,6 +94,7 @@ class BPFBoxRotatingFileHandler(handlers.TimedRotatingFileHandler):
         if t >= self.rolloverAt:
             return 1
         return 0
+
 
 def setup_logger(args):
     # Make logfile parent directory
@@ -105,16 +121,17 @@ def setup_logger(args):
         # TODO: change this to allow configurable sizes, times, backup counts
         handler = BPFBoxRotatingFileHandler(
             defs.logfile,
-            maxBytes=(1024**3),
+            maxBytes=(1024 ** 3),
             backupCount=12,
             when='w0',
-            interval=4
+            interval=4,
         )
     handler.setFormatter(formatter)
     logger.addHandler(handler)
 
     # A little debug message to tell us the logger has started
     logger.debug('Logging initialized.')
+
 
 def get_logger(name='bpfbox'):
     return logging.getLogger(name)

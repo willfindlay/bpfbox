@@ -24,6 +24,7 @@ logfile = '/var/log/bpfbox/bpfbox.log'
 # Path to bpffs
 bpffs = '/sys/fs/bpf'
 
+
 def init(args):
     """
     Make sure things are setup properly.
@@ -41,6 +42,7 @@ def init(args):
         os.chmod(profiles_directory, mode=0o1700)
 
     from bpfbox.logger import setup_logger
+
     setup_logger(args)
 
     # Make pidfile parent directory

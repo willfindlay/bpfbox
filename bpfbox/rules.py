@@ -12,6 +12,7 @@ from bpfbox import defs
 
 logger = get_logger()
 
+
 class Rules:
     """
     Defines rules that will be compiled into a BPF program to be tail called.
@@ -38,7 +39,9 @@ class Rules:
             {{
                 return 0;
             }}
-            """.format(rule['call'])
+            """.format(
+                rule['call']
+            )
             generated_rules.append(s)
 
         return generated_rules
@@ -61,11 +64,13 @@ class Rules:
 
         int {}(struct tracepoint__raw_syscalls__sys_enter *args)
         {{
-        """.format(os.path.join(defs.bpffs, 'on_enforcement'), fn_name)
+        """.format(
+            os.path.join(defs.bpffs, 'on_enforcement'), fn_name
+        )
         # End of BPF program
         # TODO: find a way to call enforce instead of bpf_send_signal
         #       also need to think about whether we really want to default allow 4 syscalls by default
-        end   = """
+        end = """
             // Allow read, write, rt_sigreturn, exit
             if (args->id == {} || args->id == {} ||
                 args->id == {} || args->id == {})
@@ -79,14 +84,18 @@ class Rules:
             on_enforcement.perf_submit(args, &event, sizeof(event));
             return 0;
         }}
-        """.format(syscall_number('read'),
-                   syscall_number('write'),
-                   syscall_number('rt_sigreturn'),
-                   syscall_number('exit'))
+        """.format(
+            syscall_number('read'),
+            syscall_number('write'),
+            syscall_number('rt_sigreturn'),
+            syscall_number('exit'),
+        )
         source = '\n'.join([start, *self.__generate_rules(), end])
         source = dedent(source)
-        logger.debug(f'BPF program for {self.profile.comm.decode("utf-8")} with '
-                     f'tail call index {self.profile.tail_call_index}: {source}')
+        logger.debug(
+            f'BPF program for {self.profile.comm.decode("utf-8")} with '
+            f'tail call index {self.profile.tail_call_index}: {source}'
+        )
         return fn_name, source
 
     def add_rule(self, rule):
@@ -103,9 +112,13 @@ class Rules:
             logger.error(f'Unable to parse rule {rule}.')
             return
         if parsed_rule['call'] < 0:
-            logger.error(f'Unknown system call {match[1]} while parsing rule {rule}.')
+            logger.error(
+                f'Unknown system call {match[1]} while parsing rule {rule}.'
+            )
             return
-        logger.info(f'Added rule {rule} to profile {self.profile.comm.decode("utf-8")}.')
+        logger.info(
+            f'Added rule {rule} to profile {self.profile.comm.decode("utf-8")}.'
+        )
         self.rules.append(parsed_rule)
 
     def generate(self):

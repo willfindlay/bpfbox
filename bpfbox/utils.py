@@ -2,11 +2,14 @@ import os, sys
 
 from bcc import syscall
 
-__syscalls = {key: value.decode('utf-8') for key, value in syscall.syscalls.items()}
+__syscalls = {
+    key: value.decode('utf-8') for key, value in syscall.syscalls.items()
+}
 __syscalls_reverse = {value: key for key, value in __syscalls.items()}
 # Patch pread64 and pwrite64 into table
-__syscalls_reverse['pread64']  = __syscalls_reverse['pread']
+__syscalls_reverse['pread64'] = __syscalls_reverse['pread']
 __syscalls_reverse['pwrite64'] = __syscalls_reverse['pwrite']
+
 
 def syscall_number(name):
     """
@@ -17,6 +20,7 @@ def syscall_number(name):
     except KeyError:
         return -1
 
+
 def syscall_name(num):
     """
     Convert a system call number to a name.
@@ -26,16 +30,19 @@ def syscall_name(num):
     except KeyError:
         return '[unknown]'
 
+
 def check_root():
     """
     Check for root permissions.
     """
     return os.geteuid() == 0
 
+
 def drop_privileges(function):
     """
     Decorator to drop root privileges.
     """
+
     def inner(*args, **kwargs):
         # Get sudoer's UID
         try:
@@ -63,7 +70,9 @@ def drop_privileges(function):
         os.setresgid(0, 0, -1)
         os.setresuid(0, 0, -1)
         return ret
+
     return inner
+
 
 def read_chunks(f, size=1024):
     """
