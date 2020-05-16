@@ -15,6 +15,7 @@ from bpfbox.bpf import structs
 
 logger = get_logger()
 
+# Handle termination signals gracefully
 signal.signal(signal.SIGTERM, lambda x, y: sys.exit(0))
 signal.signal(signal.SIGINT, lambda x, y: sys.exit(0))
 
@@ -76,16 +77,6 @@ class BPFBoxd(DaemonMixin):
         """
         Define and register perf buffers.
         """
-        # FIXME: get rid of this, just for testing
-        # def on_profile_create(cpu, data, size):
-        #    event = self.bpf['on_profile_create'].event(data)
-        #    if event.comm == b'ls':
-        #        ls_rules = Rules(self.bpf, self.flags, event)
-        #        # ls_rules.add_rule('exit_group()')
-        #        ls_rules.generate()
-
-        # self.bpf['on_profile_create'].open_perf_buffer(on_profile_create)
-
         # Policy enforcement event
         def on_enforcement(cpu, data, size):
             event = self.bpf['on_enforcement'].event(data)
@@ -150,7 +141,14 @@ class BPFBoxd(DaemonMixin):
 
         if not logger.level == logging.DEBUG:
             return
-        # TODO: call logger.debug() here to log useful data
+
+        # Dump profiles TODO
+        for key, profile in self.bpf['profiles'].iteritems():
+            pass
+
+        # Dump processes TODO
+        for key, process in self.bpf['processes'].iteritems():
+            pass
 
     def cleanup(self):
         """
