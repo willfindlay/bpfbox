@@ -12,7 +12,6 @@ from bpfbox.daemon_mixin import DaemonMixin, DaemonNotRunningError
 from bpfbox.logger import get_logger
 from bpfbox.utils import syscall_name
 from bpfbox.bpf import structs
-from bpfbox.rules import Rules
 
 logger = get_logger()
 
@@ -30,41 +29,62 @@ class BPFBoxd(DaemonMixin):
         self.bpf = None
         self.ticksleep = defs.ticksleep
         self.enforcing = args.enforcing
-        # Set flags
-        self.flags = []
-        self.flags.append(f'-I{defs.project_path}')
-        if self.enforcing:
-            self.flags.append(f'-DBPFBOX_ENFORCING')
 
-    def load_bpf(self):
+    def reload_bpf(self):
+        self.bpf.cleanup()
+        self.bpf = None
+        self.load_bpf(maps_pinned=True)
+
+    def load_bpf(self, maps_pinned=False):
         """
         Initialize BPF program.
         """
         assert self.bpf is None
+
         # Read BPF program
         with open(defs.bpf_prog_path, 'r') as f:
             source = f.read()
+
+        # Set flags
+        flags = []
+        flags.append(f'-I{defs.project_path}')
+        # Handle enforcing mode
+        if self.enforcing:
+            logger.debug('Loading BPF program in enforcing mode')
+            flags.append(f'-DBPFBOX_ENFORCING')
+        else:
+            logger.debug('Loading BPF program in permissive mode')
+        # Handle pinned maps
+        if maps_pinned:
+            logger.debug('Loading BPF program using pinned maps')
+            flags.append(f'-DMAPS_PINNED')
+
         # Load the bpf program
-        self.bpf = BPF(text=source, cflags=self.flags)
+        self.bpf = BPF(text=source, cflags=flags)
+
         # Register exit hooks
         atexit.register(self.cleanup)
+
         # Register perf buffers
         self.register_perf_buffers()
-        self.pin_map('on_enforcement')
+
+        # Pin maps
+        if not maps_pinned:
+            self.pin_map('on_enforcement')
 
     def register_perf_buffers(self):
         """
         Define and register perf buffers.
         """
         # FIXME: get rid of this, just for testing
-        def on_profile_create(cpu, data, size):
-            event = self.bpf['on_profile_create'].event(data)
-            if event.comm == b'ls':
-                ls_rules = Rules(self.bpf, self.flags, event)
-                # ls_rules.add_rule('exit_group()')
-                ls_rules.generate()
+        # def on_profile_create(cpu, data, size):
+        #    event = self.bpf['on_profile_create'].event(data)
+        #    if event.comm == b'ls':
+        #        ls_rules = Rules(self.bpf, self.flags, event)
+        #        # ls_rules.add_rule('exit_group()')
+        #        ls_rules.generate()
 
-        self.bpf['on_profile_create'].open_perf_buffer(on_profile_create)
+        # self.bpf['on_profile_create'].open_perf_buffer(on_profile_create)
 
         # Policy enforcement event
         def on_enforcement(cpu, data, size):
@@ -85,9 +105,10 @@ class BPFBoxd(DaemonMixin):
 
     def pin_map(self, name):
         """
-        Pin a map to sysfs so that they can be accessed from the tail called programs.
+        Pin a map to sysfs so that they can be accessed in subsequent runs.
         """
         fn = os.path.join(defs.bpffs, name)
+
         # remove filename before trying to pin
         if os.path.exists(fn):
             os.unlink(fn)
@@ -129,12 +150,7 @@ class BPFBoxd(DaemonMixin):
 
         if not logger.level == logging.DEBUG:
             return
-        for profile in sorted(
-            self.bpf['profiles'].values(), key=lambda p: p.tail_call_index
-        ):
-            logger.debug(
-                f'{profile.comm.decode("utf-8")} has tail call index {profile.tail_call_index}'
-            )
+        # TODO: call logger.debug() here to log useful data
 
     def cleanup(self):
         """

@@ -32,6 +32,7 @@ class BPFBoxLoggerClass(logging.getLoggerClass()):
             self._log(BPFBoxLoggerClass.POLICY, msg, args, **kwargs)
 
 
+# Set logging to use custom BPFBoxLoggerClass
 logging.setLoggerClass(BPFBoxLoggerClass)
 
 
