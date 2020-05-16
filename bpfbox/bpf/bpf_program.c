@@ -14,6 +14,9 @@ BPF_PERF_OUTPUT(on_would_have_enforced);
  * Map Definitions                                                           *
  * ========================================================================= */
 
+// TODO: use the PINNED_MAPS flag to determine whether we want to load
+// maps that have been pinned to bpffs rather than creating new maps
+
 /* This map holds information about currently running processes */
 BPF_TABLE("lru_hash", u32, struct bpfbox_process, processes, BPFBOX_MAX_PROCESSES);
 
@@ -22,6 +25,7 @@ BPF_TABLE("lru_hash", u64, struct bpfbox_profile, profiles, BPFBOX_MAX_PROFILES)
 
 /* This map holds rules that will be tail called on fs policy events */
 BPF_PROG_ARRAY(fs_policy, BPFBOX_MAX_PROFILES);
+// TODO: add other policy categories
 
 /* ========================================================================= *
  * Intermediate Maps                                                         *
@@ -189,7 +193,3 @@ int kretprobe__do_filp_open(struct pt_regs *ctx)
 
     return 0;
 }
-
-// TODO: remove this define when we get the substitution working
-#define BPFBOX_POLICY ;
-BPFBOX_POLICY

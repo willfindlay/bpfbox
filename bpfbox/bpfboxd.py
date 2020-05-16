@@ -1,4 +1,5 @@
-import os, sys
+import os
+import sys
 import atexit
 import signal
 import time
@@ -11,7 +12,7 @@ from bpfbox import defs
 from bpfbox.daemon_mixin import DaemonMixin, DaemonNotRunningError
 from bpfbox.logger import get_logger
 from bpfbox.utils import syscall_name
-from bpfbox.bpf import structs
+from bpfbox.policy import Policy
 
 logger = get_logger()
 
@@ -28,8 +29,14 @@ class BPFBoxd(DaemonMixin):
 
     def __init__(self, args):
         self.bpf = None
+        self.debug = args.debug
         self.ticksleep = defs.ticksleep
         self.enforcing = args.enforcing
+        self.policy = []
+
+        # FIXME: get rid of this, just testing
+        p = Policy('/usr/bin/ls')
+        self.policy.append(p)
 
     def reload_bpf(self):
         self.bpf.cleanup()
@@ -60,8 +67,15 @@ class BPFBoxd(DaemonMixin):
             logger.debug('Loading BPF program using pinned maps')
             flags.append(f'-DMAPS_PINNED')
 
+        # Generate policy
+        for policy in self.policy:
+            source = '\n'.join([source, policy.generate_bpf_program()])
+
         # Load the bpf program
         self.bpf = BPF(text=source, cflags=flags)
+
+        for policy in self.policy:
+            policy.register_tail_calls(self.bpf)
 
         # Register exit hooks
         atexit.register(self.cleanup)
@@ -161,12 +175,33 @@ class BPFBoxd(DaemonMixin):
         self.save_profiles()
         self.bpf = None
 
+    def trace_print(self):
+        """
+        Helper to print information from debugfs logfile until we have consumed it entirely.
+
+        This is great for debugging, but should not be used in production, since the debugfs logfile
+        is shared globally between all BPF programs.
+        """
+        while True:
+            try:
+                fields = self.bpf.trace_fields(nonblocking=True)
+                msg = fields[-1]
+                if msg == None:
+                    return
+                logger.debug(msg.decode('utf-8'))
+            except:
+                logger.warning(
+                    "Could not correctly parse debug information from debugfs"
+                )
+
     def loop_forever(self):
         """
         BPFBoxd main event loop.
         """
         self.load_bpf()
         while 1:
+            if self.debug:
+                self.trace_print()
             self.bpf.perf_buffer_poll(30)
             time.sleep(self.ticksleep)
 

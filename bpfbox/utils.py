@@ -1,11 +1,17 @@
-import os, sys
+import os
+import sys
+import itertools
 
 from bcc import syscall
 
+# Mappings for syscall number to name, used in syscall_name()
 __syscalls = {
     key: value.decode('utf-8') for key, value in syscall.syscalls.items()
 }
+
+# Mappings for syscall name to number, used in syscall_number()
 __syscalls_reverse = {value: key for key, value in __syscalls.items()}
+
 # Patch pread64 and pwrite64 into table
 __syscalls_reverse['pread64'] = __syscalls_reverse['pread']
 __syscalls_reverse['pwrite64'] = __syscalls_reverse['pwrite']
@@ -31,9 +37,25 @@ def syscall_name(num):
         return '[unknown]'
 
 
+def calculate_profile_key(path, follow_symlink=False):
+    """
+    Convert a path to a profile key using the same
+    logic as bpf_program.c
+    """
+    try:
+        stat = os.stat(path) if follow_symlink else os.lstat(path)
+    except FileNotFoundError:
+        from bpfbox.logger import get_logger
+
+        logger = get_logger()
+        logger.error(f'No such file or directory {path}')
+        return None
+    return stat.st_ino | (stat.st_dev << 32)
+
+
 def check_root():
     """
-    Check for root permissions.
+    Check for root privileges.
     """
     return os.geteuid() == 0
 
@@ -84,3 +106,15 @@ def read_chunks(f, size=1024):
         if not data:
             break
         yield data
+
+
+def powerperm(ell):
+    """
+    Calculate powerset permutations.
+    """
+    s = list(ell)
+    perms = itertools.chain.from_iterable(
+        itertools.permutations(s, r) for r in range(1, len(s) + 1)
+    )
+    perms = map(lambda p: ''.join(list(p)), perms)
+    return list(perms)

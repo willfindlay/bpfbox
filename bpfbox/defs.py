@@ -13,7 +13,7 @@ ticksleep = 0.1
 working_directory = '/var/lib/bpfbox'
 
 # Path to profiles directory
-profiles_directory = os.path.join(working_directory, 'profiles')
+profiles_directory = os.path.join(working_directory, 'policy')
 
 # Path to pidfile
 pidfile = '/var/run/bpfboxd.pid'
