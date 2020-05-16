@@ -8,34 +8,8 @@
 
 import ctypes as ct
 
-# TODO: read this from linux/limits.h instead
-PATH_MAX = 4096
-# TODO: read this from linux/sched.h instead
-TASK_COMM_LEN = 16
+# TODO
 
-class BPFBoxPathStruct(ct.Structure):
-    """
-    struct bpfbox_path
-    """
-    _fields_ = [
-            ('path', ct.c_char * PATH_MAX),
-            ]
 
 class BPFBoxProfileStruct(ct.Structure):
-    """
-    struct bpfbox_profile
-    """
-    _fields_ = [
-            ('tail_call_index', ct.c_int),
-            ('comm', ct.c_char * TASK_COMM_LEN),
-            ]
-
-class BPFBoxProcessStruct(ct.Structure):
-    """
-    struct bpfbox_process
-    """
-    _fields_ = [
-            ('pid', ct.c_uint32),
-            ('profile_key', ct.c_uint64),
-            ('enforcing', ct.c_uint8),
-            ]
+    _fields_ = (('tail_call_index', ct.c_int),)

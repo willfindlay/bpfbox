@@ -13,7 +13,7 @@ ticksleep = 0.1
 working_directory = '/var/lib/bpfbox'
 
 # Path to profiles directory
-profiles_directory = os.path.join(working_directory, 'profiles')
+profiles_directory = os.path.join(working_directory, 'policy')
 
 # Path to pidfile
 pidfile = '/var/run/bpfboxd.pid'
@@ -23,6 +23,7 @@ logfile = '/var/log/bpfbox/bpfbox.log'
 
 # Path to bpffs
 bpffs = '/sys/fs/bpf'
+
 
 def init(args):
     """
@@ -41,6 +42,7 @@ def init(args):
         os.chmod(profiles_directory, mode=0o1700)
 
     from bpfbox.logger import setup_logger
+
     setup_logger(args)
 
     # Make pidfile parent directory
