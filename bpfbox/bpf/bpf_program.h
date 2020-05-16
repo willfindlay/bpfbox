@@ -52,7 +52,7 @@ struct bpfbox_profile
 struct bpfbox_process
 {
     u32 pid;
-    u32 tid;
+    u32 tgid;
     u64 profile_key;
     u8 tainted;
 };
@@ -64,7 +64,7 @@ struct bpfbox_process
 struct enforcement_event
 {
     u32 pid;
-    u32 tid;
+    u32 tgid;
     u64 profile_key;
 };
 

@@ -7,5 +7,4 @@
 
 /* Maximum number of processes that can be observed at any given time. */
 #define BPFBOX_MAX_PROCESSES 10240
-
 #endif /* DEFS_H */

@@ -80,7 +80,7 @@ class BPFBoxd(DaemonMixin):
         # enforce() called while enforcing
         def on_enforcement(cpu, data, size):
             event = self.bpf['on_enforcement'].event(data)
-            logger.policy(f'Enforcing in PID {event.pid} TID {event.tid}')
+            logger.policy(f'Enforcing in PID {event.tgid} TID {event.pid}')
 
         self.bpf['on_enforcement'].open_perf_buffer(on_enforcement)
 
@@ -88,7 +88,7 @@ class BPFBoxd(DaemonMixin):
         def on_would_have_enforced(cpu, data, size):
             event = self.bpf['on_would_have_enforced'].event(data)
             logger.policy(
-                f'Would have enforced in PID {event.pid} TID {event.tid}'
+                f'Would have enforced in PID {event.tgid} TID {event.pid}'
             )
 
         self.bpf['on_would_have_enforced'].open_perf_buffer(

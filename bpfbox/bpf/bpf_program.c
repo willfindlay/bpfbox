@@ -36,7 +36,7 @@ BPF_ARRAY(__do_filp_open_intermediate, struct open_flags, 1);
  * ========================================================================= */
 
 static __always_inline
-struct bpfbox_process *create_process(void *ctx, u32 pid, u32 tid)
+struct bpfbox_process *create_process(void *ctx, u32 pid, u32 tgid)
 {
     int zero = 0;
     struct bpfbox_process process = {};
@@ -44,7 +44,7 @@ struct bpfbox_process *create_process(void *ctx, u32 pid, u32 tid)
     process.tainted = 0;
     process.profile_key = 0;
     process.pid = pid;
-    process.tid = tid;
+    process.tgid = tgid;
 
     return processes.lookup_or_try_init(&pid, &process);
 }
@@ -87,6 +87,7 @@ RAW_TRACEPOINT_PROBE(sched_process_fork)
 
     u32 ppid = p->pid;
     u32 cpid = c->pid;
+    u32 ctgid = c->tgid;
 
     // Create the process
     process = create_process(ctx, cpid);
