@@ -11,4 +11,5 @@ setup(
     author_email='william.findlay@carleton.ca',
     url='https://github.com/willfindlay/bpfbox',
     packages=['bpfbox'],
+    python_version='>=3.6',
 )
