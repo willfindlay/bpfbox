@@ -8,8 +8,6 @@
 
 import ctypes as ct
 
-# TODO
-
 
 class BPFBoxProfileStruct(ct.Structure):
     _fields_ = (('tail_call_index', ct.c_int),)
