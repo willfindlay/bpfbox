@@ -4,6 +4,7 @@ import atexit
 import signal
 import time
 import ctypes as ct
+from collections import defaultdict
 
 from bcc import BPF
 from bcc.libbcc import lib
@@ -33,9 +34,10 @@ class BPFBoxd(DaemonMixin):
         self.ticksleep = defs.ticksleep
         self.enforcing = args.enforcing
         self.policy = []
+        self.profile_key_to_exe = defaultdict(lambda x: 'UNKNOWN')
 
         # FIXME: get rid of this, just testing
-        p = Policy('/usr/bin/ls')
+        p = Policy('/usr/bin/ls', taint_on_exec=True)
         self.policy.append(p)
 
     def reload_bpf(self):
@@ -67,13 +69,15 @@ class BPFBoxd(DaemonMixin):
             logger.debug('Loading BPF program using pinned maps')
             flags.append(f'-DMAPS_PINNED')
 
-        # Generate policy
+        # Generate policy and register binary names
         for policy in self.policy:
+            self.profile_key_to_exe[policy.profile_key] = policy.binary
             source = '\n'.join([source, policy.generate_bpf_program()])
 
         # Load the bpf program
         self.bpf = BPF(text=source, cflags=flags)
 
+        # Register tail call programs
         for policy in self.policy:
             policy.register_tail_calls(self.bpf)
 
@@ -85,29 +89,27 @@ class BPFBoxd(DaemonMixin):
 
         # Pin maps
         if not maps_pinned:
-            self.pin_map('on_enforcement')
+            self.pin_map('on_fs_enforcement')
 
     def register_perf_buffers(self):
         """
         Define and register perf buffers.
         """
-        # enforce() called while enforcing
-        def on_enforcement(cpu, data, size):
-            event = self.bpf['on_enforcement'].event(data)
-            logger.policy(f'Enforcing in PID {event.tgid} TID {event.pid}')
 
-        self.bpf['on_enforcement'].open_perf_buffer(on_enforcement)
-
-        # enforce() called while permissive
-        def on_would_have_enforced(cpu, data, size):
-            event = self.bpf['on_would_have_enforced'].event(data)
+        def on_fs_enforcement(cpu, data, size):
+            event = self.bpf['on_fs_enforcement'].event(data)
+            enforcement_prefix = (
+                'Enforcing' if event.enforcing else 'Would have enforced'
+            )
             logger.policy(
-                f'Would have enforced in PID {event.tgid} TID {event.pid}'
+                f'{enforcement_prefix} filesystem access in '
+                f'{self.profile_key_to_exe[event.profile_key]} '
+                f'(PID {event.tgid} TID {event.pid}): '
+                f'inode={event.inode}, dir_inode={event.dir_inode}, '
+                f'access={event.access}'
             )
 
-        self.bpf['on_would_have_enforced'].open_perf_buffer(
-            on_would_have_enforced
-        )
+        self.bpf['on_fs_enforcement'].open_perf_buffer(on_fs_enforcement)
 
     def pin_map(self, name):
         """

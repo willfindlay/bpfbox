@@ -47,6 +47,7 @@ struct open_flags {
 struct bpfbox_profile
 {
     int tail_call_index;
+    u8 taint_on_exec;
 };
 
 struct bpfbox_process
@@ -61,11 +62,19 @@ struct bpfbox_process
  * Event Data                                                                *
  * ========================================================================= */
 
-struct enforcement_event
-{
-    u32 pid;
-    u32 tgid;
+#define ENFORCEMENT_COMMON \
+    u8 enforcing; \
+    int category; \
+    u32 pid; \
+    u32 tgid; \
     u64 profile_key;
+
+struct fs_enforcement_event
+{
+    ENFORCEMENT_COMMON
+    u32 inode;
+    u32 dir_inode;
+    int access;
 };
 
 /* ========================================================================= *

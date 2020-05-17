@@ -7,8 +7,7 @@
  * ========================================================================= */
 
 BPF_PERF_OUTPUT(on_process_create); // TODO: either link or delete this
-BPF_PERF_OUTPUT(on_enforcement);
-BPF_PERF_OUTPUT(on_would_have_enforced);
+BPF_PERF_OUTPUT(on_fs_enforcement);
 
 /* ========================================================================= *
  * Map Definitions                                                           *
@@ -54,24 +53,29 @@ struct bpfbox_process *create_process(void *ctx, u32 pid, u32 tgid)
 }
 
 static __always_inline
-int enforce(void *ctx, struct bpfbox_process *process,
-    struct bpfbox_profile *profile)
+int fs_enforce(void *ctx, struct bpfbox_process *process,
+    struct bpfbox_profile *profile, u32 inode, u32 dir_inode, int access)
 {
     #ifdef BPFBOX_ENFORCING
     bpf_send_signal(SIGKILL);
     #endif
 
-    struct enforcement_event event = {};
+    struct fs_enforcement_event event = {};
 
+    #ifdef BPFBOX_ENFORCING
+    event.enforcing = 1;
+    #else
+    event.enforcing = 0;
+    #endif
     event.pid = process->pid;
     event.tgid = process->tgid;
     event.profile_key = process->profile_key;
 
-    #ifdef BPFBOX_ENFORCING
-    on_enforcement.perf_submit(ctx, &event, sizeof(event));
-    #else
-    on_would_have_enforced.perf_submit(ctx, &event, sizeof(event));
-    #endif
+    event.inode = inode;
+    event.dir_inode = dir_inode;
+    event.access = access;
+
+    on_fs_enforcement.perf_submit(ctx, &event, sizeof(event));
 
     return 0;
 }
@@ -111,6 +115,9 @@ RAW_TRACEPOINT_PROBE(sched_process_fork)
     // Assign child profile to parent profile if it exists
     process->profile_key = parent_process->profile_key;
 
+    // If parent process is tained, child should be too
+    process->tainted = parent_process->tainted;
+
     return 0;
 }
 
@@ -140,6 +147,10 @@ RAW_TRACEPOINT_PROBE(sched_process_exec)
     }
 
     process->profile_key = profile_key;
+
+    // taint after execve?
+    if (profile->taint_on_exec)
+        process->tainted = 1;
 
     return 0;
 }

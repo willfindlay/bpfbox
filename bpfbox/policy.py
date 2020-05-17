@@ -40,11 +40,12 @@ class Policy:
     _next_tail_call_index = count()
     next(_next_tail_call_index)
 
-    def __init__(self, binary):
+    def __init__(self, binary, taint_on_exec=False):
         self.tail_call_index = next(Policy._next_tail_call_index)
         # TODO: deal with interpreted scripts
         self.profile_key = calculate_profile_key(binary)
-        self.comm = binary
+        self.taint_on_exec = taint_on_exec
+        self.binary = binary
 
         self.fs_read_rules = []
         self.fs_write_rules = []
@@ -74,9 +75,15 @@ class Policy:
         bpf['fs_policy'][ct.c_int(self.tail_call_index)] = ct.c_int(fn.fd)
         # TODO other policy types here
         # register profile struct
+        bpf['profiles'][
+            ct.c_uint64(self.profile_key)
+        ] = self._generate_profile_struct()
+
+    def _generate_profile_struct(self):
         struct = BPFBoxProfileStruct()
         struct.tail_call_index = self.tail_call_index
-        bpf['profiles'][ct.c_uint64(self.profile_key)] = struct
+        struct.taint_on_exec = ct.c_uint8(int(self.taint_on_exec))
+        return struct
 
     def _generate_fs_rule(self, mode, path, taint=False):
         """
