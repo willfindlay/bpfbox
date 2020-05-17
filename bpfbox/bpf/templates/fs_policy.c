@@ -44,7 +44,10 @@ int fs_policy_PROFILEKEY(struct pt_regs *ctx)
             if (FS_WRITE_POLICY)
                 return 0;
             else
-                enforce(ctx, process, profile);
+            {
+                fs_enforce(ctx, process, profile, inode, parent_inode, MAY_WRITE);
+                return 0;
+            }
         }
 
         // Enforce read policy
@@ -53,7 +56,10 @@ int fs_policy_PROFILEKEY(struct pt_regs *ctx)
             if (FS_READ_POLICY)
                 return 0;
             else
-                enforce(ctx, process, profile);
+            {
+                fs_enforce(ctx, process, profile, inode, parent_inode, MAY_READ);
+                return 0;
+            }
         }
 
         // Enforce append policy
@@ -62,7 +68,10 @@ int fs_policy_PROFILEKEY(struct pt_regs *ctx)
             if (FS_APPEND_POLICY)
                 return 0;
             else
-                enforce(ctx, process, profile);
+            {
+                fs_enforce(ctx, process, profile, inode, parent_inode, MAY_APPEND);
+                return 0;
+            }
         }
 
         // Enforce execute policy
@@ -71,11 +80,14 @@ int fs_policy_PROFILEKEY(struct pt_regs *ctx)
             if (FS_EXEC_POLICY)
                 return 0;
             else
-                enforce(ctx, process, profile);
+            {
+                fs_enforce(ctx, process, profile, inode, parent_inode, MAY_EXEC);
+                return 0;
+            }
         }
 
         // Default deny
-        enforce(ctx, process, profile);
+        fs_enforce(ctx, process, profile, inode, parent_inode, -1);
     }
 
     return 0;

@@ -10,4 +10,4 @@ import ctypes as ct
 
 
 class BPFBoxProfileStruct(ct.Structure):
-    _fields_ = (('tail_call_index', ct.c_int),)
+    _fields_ = (('tail_call_index', ct.c_int), ('taint_on_exec', ct.c_uint8))
