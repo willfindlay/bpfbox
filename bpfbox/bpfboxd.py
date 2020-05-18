@@ -12,7 +12,7 @@ from bcc.libbcc import lib
 from bpfbox import defs
 from bpfbox.daemon_mixin import DaemonMixin, DaemonNotRunningError
 from bpfbox.logger import get_logger
-from bpfbox.utils import syscall_name
+from bpfbox.utils import syscall_name, access_name
 from bpfbox.policy import Policy
 
 logger = get_logger()
@@ -85,9 +85,10 @@ class BPFBoxd(DaemonMixin):
         # Load the bpf program
         self.bpf = BPF(text=source, cflags=flags)
 
-        # Register tail call programs
+        # Register tail call programs and profile structs
         for policy in self.policy:
             policy.register_tail_calls(self.bpf)
+            policy.register_profile_struct(self.bpf)
 
         # Register exit hooks
         atexit.register(self.cleanup)
@@ -113,8 +114,8 @@ class BPFBoxd(DaemonMixin):
                 f'{enforcement_prefix} filesystem access in '
                 f'{self.profile_key_to_exe[event.profile_key]} '
                 f'(PID {event.tgid} TID {event.pid}): '
-                f'inode={event.inode}, dir_inode={event.dir_inode}, '
-                f'st_dev={event.st_dev}, access={event.access}'
+                f'inode={event.inode}, parent_inode={event.parent_inode}, '
+                f'st_dev={event.st_dev}, access={access_name(event.access)}'
             )
 
         self.bpf['on_fs_enforcement'].open_perf_buffer(on_fs_enforcement)

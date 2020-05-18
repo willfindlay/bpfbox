@@ -18,13 +18,13 @@ __syscalls_reverse['pwrite64'] = __syscalls_reverse['pwrite']
 
 # linux/fs.h
 __accesses = {
-    0x01: 'exec',
-    0x02: 'write',
-    0x04: 'read',
-    0x08: 'append',
-    0x10: 'access',
-    0x20: 'open',
-    0x40: 'chdir',
+    'MAY_EXEC': 0x01,
+    'MAY_WRITE': 0x02,
+    'MAY_READ': 0x04,
+    'MAY_APPEND': 0x08,
+    #'access': 0x10,
+    #'open': 0x20,
+    #'chdir': 0x40,
 }
 
 
@@ -52,10 +52,28 @@ def access_name(num):
     """
     Convert file access const to name.
     """
-    try:
-        return __accesses[num]
-    except KeyError:
-        return '[unknown]'
+
+    if num & __accesses['MAY_READ']:
+        r = 'r'
+    else:
+        r = ''
+
+    if num & __accesses['MAY_WRITE']:
+        w = 'w'
+    else:
+        w = ''
+
+    if num & __accesses['MAY_APPEND']:
+        a = 'a'
+    else:
+        a = ''
+
+    if num & __accesses['MAY_EXEC']:
+        x = 'x'
+    else:
+        x = ''
+
+    return ''.join([r, w, a, x])
 
 
 def get_inode_and_device(path, follow_symlink=True):

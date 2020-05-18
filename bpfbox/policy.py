@@ -81,7 +81,8 @@ class Policy:
         fn = bpf.load_func(f'fs_policy_{self.profile_key}', BPF.KPROBE)
         bpf['fs_policy'][ct.c_int(self.tail_call_index)] = ct.c_int(fn.fd)
         # TODO other policy types here
-        # register profile struct
+
+    def register_profile_struct(self, bpf):
         bpf['profiles'][
             ct.c_uint64(self.profile_key)
         ] = self._generate_profile_struct()

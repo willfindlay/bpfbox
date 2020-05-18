@@ -73,7 +73,7 @@ struct fs_enforcement_event
 {
     ENFORCEMENT_COMMON
     u32 inode;
-    u32 dir_inode;
+    u32 parent_inode;
     u32 st_dev;
     int access;
 };
