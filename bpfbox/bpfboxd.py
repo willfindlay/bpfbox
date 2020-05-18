@@ -33,11 +33,19 @@ class BPFBoxd(DaemonMixin):
         self.debug = args.debug
         self.ticksleep = defs.ticksleep
         self.enforcing = args.enforcing
+        self.profile_key_to_exe = defaultdict(lambda x: '[unknown]')
+
+        # Holds the Policy objects that will be used to generate the BPF
+        # programs TODO: maybe use a generator instead
         self.policy = []
-        self.profile_key_to_exe = defaultdict(lambda x: 'UNKNOWN')
 
         # FIXME: get rid of this, just testing
         p = Policy('/usr/bin/ls', taint_on_exec=True)
+        p._generate_fs_rule('r', '/etc/ld.so.cache')
+        p._generate_fs_rule('r', '/usr/lib/libcap.so.2')
+        p._generate_fs_rule('r', '/usr/lib/locale/locale-archive')
+        p._generate_fs_rule('r', '/usr/lib/libc.so.6')
+        p._generate_fs_rule('r', '/home/housedhorse/documents/projects/bpfbox')
         self.policy.append(p)
 
     def reload_bpf(self):
@@ -106,7 +114,7 @@ class BPFBoxd(DaemonMixin):
                 f'{self.profile_key_to_exe[event.profile_key]} '
                 f'(PID {event.tgid} TID {event.pid}): '
                 f'inode={event.inode}, dir_inode={event.dir_inode}, '
-                f'access={event.access}'
+                f'st_dev={event.st_dev}, access={event.access}'
             )
 
         self.bpf['on_fs_enforcement'].open_perf_buffer(on_fs_enforcement)
