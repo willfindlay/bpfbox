@@ -16,6 +16,17 @@ __syscalls_reverse = {value: key for key, value in __syscalls.items()}
 __syscalls_reverse['pread64'] = __syscalls_reverse['pread']
 __syscalls_reverse['pwrite64'] = __syscalls_reverse['pwrite']
 
+# linux/fs.h
+__accesses = {
+    0x01: 'exec',
+    0x02: 'write',
+    0x04: 'read',
+    0x08: 'append',
+    0x10: 'access',
+    0x20: 'open',
+    0x40: 'chdir',
+}
+
 
 def syscall_number(name):
     """
@@ -37,20 +48,31 @@ def syscall_name(num):
         return '[unknown]'
 
 
-def calculate_profile_key(path, follow_symlink=False):
+def access_name(num):
+    """
+    Convert file access const to name.
+    """
+    try:
+        return __accesses[num]
+    except KeyError:
+        return '[unknown]'
+
+
+def get_inode_and_device(path, follow_symlink=True):
+    """
+    Return (inode#, device#) tuple for path.
+    """
+    stat = os.stat(path) if follow_symlink else os.lstat(path)
+    return (stat.st_ino, stat.st_dev)
+
+
+def calculate_profile_key(path, follow_symlink=True):
     """
     Convert a path to a profile key using the same
     logic as bpf_program.c
     """
-    try:
-        stat = os.stat(path) if follow_symlink else os.lstat(path)
-    except FileNotFoundError:
-        from bpfbox.logger import get_logger
-
-        logger = get_logger()
-        logger.error(f'No such file or directory {path}')
-        return None
-    return stat.st_ino | (stat.st_dev << 32)
+    st_ino, st_dev = get_inode_and_device(path, follow_symlink)
+    return st_ino | (st_dev << 32)
 
 
 def check_root():

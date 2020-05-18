@@ -29,6 +29,7 @@ int fs_policy_PROFILEKEY(struct pt_regs *ctx)
     struct dentry *parent = fp->f_path.dentry->d_parent;
     u32 inode = dentry->d_inode->i_ino;
     u32 parent_inode = parent ? parent->d_inode->i_ino : 0;
+    u32 st_dev = (u32)new_encode_dev(dentry->d_inode->i_sb->s_dev);
 
     // Extract access mode
     int acc_mode = op->acc_mode;
@@ -45,7 +46,7 @@ int fs_policy_PROFILEKEY(struct pt_regs *ctx)
                 return 0;
             else
             {
-                fs_enforce(ctx, process, profile, inode, parent_inode, MAY_WRITE);
+                fs_enforce(ctx, process, profile, inode, parent_inode, st_dev, MAY_WRITE);
                 return 0;
             }
         }
@@ -57,7 +58,7 @@ int fs_policy_PROFILEKEY(struct pt_regs *ctx)
                 return 0;
             else
             {
-                fs_enforce(ctx, process, profile, inode, parent_inode, MAY_READ);
+                fs_enforce(ctx, process, profile, inode, parent_inode, st_dev, MAY_READ);
                 return 0;
             }
         }
@@ -69,7 +70,7 @@ int fs_policy_PROFILEKEY(struct pt_regs *ctx)
                 return 0;
             else
             {
-                fs_enforce(ctx, process, profile, inode, parent_inode, MAY_APPEND);
+                fs_enforce(ctx, process, profile, inode, parent_inode, st_dev, MAY_APPEND);
                 return 0;
             }
         }
@@ -81,13 +82,13 @@ int fs_policy_PROFILEKEY(struct pt_regs *ctx)
                 return 0;
             else
             {
-                fs_enforce(ctx, process, profile, inode, parent_inode, MAY_EXEC);
+                fs_enforce(ctx, process, profile, inode, parent_inode, st_dev, MAY_EXEC);
                 return 0;
             }
         }
 
         // Default deny
-        fs_enforce(ctx, process, profile, inode, parent_inode, -1);
+        fs_enforce(ctx, process, profile, inode, parent_inode, st_dev, -1);
     }
 
     return 0;
