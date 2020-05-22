@@ -38,7 +38,10 @@ class FSRule(Rule):
         # its immediate children to be opened
         # TODO: maybe change this behavior to allow more control
         if os.path.isdir(self.path):
-            file_predicate = f'((inode == {st_ino} || parent_inode == {st_ino}) && st_dev == {st_dev})'
+            file_predicate = (
+                f'((inode == {st_ino} || parent_inode == {st_ino})'
+                f' && st_dev == {st_dev})'
+            )
         else:
             file_predicate = f'(inode == {st_ino} && st_dev == {st_dev})'
         access_predicate = f'(acc_mode & {self.mode})'

@@ -59,17 +59,41 @@ struct bpfbox_process
 };
 
 /* ========================================================================= *
+ * Intermediate Data                                                         *
+ * ========================================================================= */
+
+// Networking policy categories
+//struct bpfbox_net_intermediate
+//{
+//    int syscall;
+//    long arg1;
+//    long arg2;
+//    long arg3;
+//    long arg4;
+//    long arg5;
+//    long arg6;
+//};
+
+/* ========================================================================= *
  * Event Data                                                                *
  * ========================================================================= */
 
 #define ENFORCEMENT_COMMON \
     u8 enforcing; \
-    int category; \
     u32 pid; \
     u32 tgid; \
     u64 profile_key;
 
 struct fs_enforcement_event
+{
+    ENFORCEMENT_COMMON
+    u32 inode;
+    u32 parent_inode;
+    u32 st_dev;
+    int access;
+};
+
+struct net_enforcement_event
 {
     ENFORCEMENT_COMMON
     u32 inode;

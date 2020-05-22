@@ -24,6 +24,7 @@ BPF_TABLE("lru_hash", u64, struct bpfbox_profile, profiles, BPFBOX_MAX_PROFILES)
 
 /* This map holds rules that will be tail called on fs policy events */
 BPF_PROG_ARRAY(fs_policy, BPFBOX_MAX_PROFILES);
+BPF_PROG_ARRAY(net_policy, BPFBOX_MAX_PROFILES);
 // TODO: add other policy categories
 
 /* ========================================================================= *
@@ -33,6 +34,7 @@ BPF_PROG_ARRAY(fs_policy, BPFBOX_MAX_PROFILES);
 /* This array holds intermediate values between entry and exit points to
  * do_filp_open */
 BPF_ARRAY(__do_filp_open_intermediate, struct open_flags, 1);
+BPF_ARRAY(__net_intermediate, struct bpfbox_net_intermediate, 1);
 
 /* ========================================================================= *
  * Helper Functions                                                          *
@@ -51,6 +53,8 @@ struct bpfbox_process *create_process(void *ctx, u32 pid, u32 tgid)
 
     return processes.lookup_or_try_init(&pid, &process);
 }
+
+/* Policy enforcement helpers below this line ------------------------------ */
 
 static __always_inline
 int fs_enforce(void *ctx, struct bpfbox_process *process,
@@ -77,6 +81,35 @@ int fs_enforce(void *ctx, struct bpfbox_process *process,
     event.access = access;
 
     on_fs_enforcement.perf_submit(ctx, &event, sizeof(event));
+
+    return 0;
+}
+
+static __always_inline
+int net_enforce(void *ctx, struct bpfbox_process *process,
+    struct bpfbox_profile *profile, struct bpfbox_net_intermediate *net)
+{
+    #ifdef BPFBOX_ENFORCING
+    bpf_send_signal(SIGKILL);
+    #endif
+
+    struct net_enforcement_event event = {};
+
+    #ifdef BPFBOX_ENFORCING
+    event.enforcing = 1;
+    #else
+    event.enforcing = 0;
+    #endif
+    event.pid = process->pid;
+    event.tgid = process->tgid;
+    event.profile_key = process->profile_key;
+
+    //event.inode = inode;
+    //event.parent_inode = parent_inode;
+    //event.st_dev = st_dev;
+    //event.access = access;
+
+    on_net_enforcement.perf_submit(ctx, &event, sizeof(event));
 
     return 0;
 }
@@ -165,6 +198,8 @@ RAW_TRACEPOINT_PROBE(sched_process_exit)
     return 0;
 }
 
+/* File system policy entrypoints below this line -------------------------- */
+
 /* A kprobe that checks the arguments to do_filp_open
  * (underlying implementation of open, openat, and openat2). */
 int kprobe__do_filp_open(struct pt_regs *ctx, int dfd,
@@ -205,3 +240,5 @@ int kretprobe__do_filp_open(struct pt_regs *ctx)
 
     return 0;
 }
+
+/* Network event entrypoints below this line ------------------------------- */
