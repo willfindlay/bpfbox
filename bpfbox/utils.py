@@ -16,17 +16,6 @@ __syscalls_reverse = {value: key for key, value in __syscalls.items()}
 __syscalls_reverse['pread64'] = __syscalls_reverse['pread']
 __syscalls_reverse['pwrite64'] = __syscalls_reverse['pwrite']
 
-# linux/fs.h
-__accesses = {
-    'MAY_EXEC': 0x01,
-    'MAY_WRITE': 0x02,
-    'MAY_READ': 0x04,
-    'MAY_APPEND': 0x08,
-    #'access': 0x10,
-    #'open': 0x20,
-    #'chdir': 0x40,
-}
-
 
 def syscall_number(name):
     """
@@ -52,23 +41,24 @@ def access_name(num):
     """
     Convert file access const to name.
     """
+    from bpfbox.rules import AccessMode
 
-    if num & __accesses['MAY_READ']:
+    if num & AccessMode.MAY_READ:
         r = 'r'
     else:
         r = ''
 
-    if num & __accesses['MAY_WRITE']:
+    if num & AccessMode.MAY_WRITE:
         w = 'w'
     else:
         w = ''
 
-    if num & __accesses['MAY_APPEND']:
+    if num & AccessMode.MAY_APPEND:
         a = 'a'
     else:
         a = ''
 
-    if num & __accesses['MAY_EXEC']:
+    if num & AccessMode.MAY_EXEC:
         x = 'x'
     else:
         x = ''

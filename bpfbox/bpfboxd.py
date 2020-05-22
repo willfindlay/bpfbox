@@ -14,6 +14,7 @@ from bpfbox.daemon_mixin import DaemonMixin, DaemonNotRunningError
 from bpfbox.logger import get_logger
 from bpfbox.utils import syscall_name, access_name
 from bpfbox.policy import Policy
+from bpfbox.rules import AccessMode
 
 logger = get_logger()
 
@@ -40,12 +41,15 @@ class BPFBoxd(DaemonMixin):
         self.policy = []
 
         # FIXME: get rid of this, just testing
-        p = Policy('/usr/bin/ls', taint_on_exec=True)
-        p._generate_fs_rule('r', '/etc/ld.so.cache')
-        p._generate_fs_rule('r', '/usr/lib/libcap.so.2')
-        p._generate_fs_rule('r', '/usr/lib/locale/locale-archive')
-        p._generate_fs_rule('r', '/usr/lib/libc.so.6')
-        p._generate_fs_rule('r', '/home/housedhorse/documents/projects/bpfbox')
+        p = Policy('/usr/bin/ls')
+        # p.fs_taint('/etc/ld.so.cache', AccessMode.MAY_READ)
+        p.fs_allow('/etc/ld.so.cache', AccessMode.MAY_READ)
+        p.fs_allow('/usr/lib/libcap.so.2', AccessMode.MAY_READ)
+        p.fs_allow('/usr/lib/locale/locale-archive', AccessMode.MAY_READ)
+        p.fs_allow('/usr/lib/libc.so.6', AccessMode.MAY_READ)
+        p.fs_allow(
+            '/home/housedhorse/documents/projects/bpfbox', AccessMode.MAY_READ
+        )
         self.policy.append(p)
 
     def reload_bpf(self):
