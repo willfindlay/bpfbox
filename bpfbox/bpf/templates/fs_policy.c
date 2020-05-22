@@ -34,61 +34,24 @@ int fs_policy_PROFILEKEY(struct pt_regs *ctx)
     // Extract access mode
     int acc_mode = op->acc_mode;
 
-    // TODO: optional TAINT_RULE here
+    // Apply taint rules if not tainted
+    if (!process->tainted)
+    {
+        if (FS_TAINT_RULES)
+        {
+            process->tainted = 1;
+            return 0;
+        }
+    }
 
     // Enforce policy if tainted
     if (process->tainted)
     {
-        // Enforce write policy
-        if (acc_mode & MAY_WRITE)
+        if (!(FS_ALLOW_RULES))
         {
-            if (FS_WRITE_POLICY)
-                return 0;
-            else
-            {
-                fs_enforce(ctx, process, profile, inode, parent_inode, st_dev, MAY_WRITE);
-                return 0;
-            }
+            fs_enforce(ctx, process, profile, inode, parent_inode, st_dev, acc_mode);
+            return 0;
         }
-
-        // Enforce read policy
-        if (acc_mode & MAY_READ)
-        {
-            if (FS_READ_POLICY)
-                return 0;
-            else
-            {
-                fs_enforce(ctx, process, profile, inode, parent_inode, st_dev, MAY_READ);
-                return 0;
-            }
-        }
-
-        // Enforce append policy
-        if (acc_mode & MAY_APPEND)
-        {
-            if (FS_APPEND_POLICY)
-                return 0;
-            else
-            {
-                fs_enforce(ctx, process, profile, inode, parent_inode, st_dev, MAY_APPEND);
-                return 0;
-            }
-        }
-
-        // Enforce execute policy
-        if (acc_mode & MAY_EXEC)
-        {
-            if (FS_EXEC_POLICY)
-                return 0;
-            else
-            {
-                fs_enforce(ctx, process, profile, inode, parent_inode, st_dev, MAY_EXEC);
-                return 0;
-            }
-        }
-
-        // Default deny
-        fs_enforce(ctx, process, profile, inode, parent_inode, st_dev, -1);
     }
 
     return 0;

@@ -16,17 +16,6 @@ __syscalls_reverse = {value: key for key, value in __syscalls.items()}
 __syscalls_reverse['pread64'] = __syscalls_reverse['pread']
 __syscalls_reverse['pwrite64'] = __syscalls_reverse['pwrite']
 
-# linux/fs.h
-__accesses = {
-    0x01: 'exec',
-    0x02: 'write',
-    0x04: 'read',
-    0x08: 'append',
-    0x10: 'access',
-    0x20: 'open',
-    0x40: 'chdir',
-}
-
 
 def syscall_number(name):
     """
@@ -52,10 +41,29 @@ def access_name(num):
     """
     Convert file access const to name.
     """
-    try:
-        return __accesses[num]
-    except KeyError:
-        return '[unknown]'
+    from bpfbox.rules import AccessMode
+
+    if num & AccessMode.MAY_READ:
+        r = 'r'
+    else:
+        r = ''
+
+    if num & AccessMode.MAY_WRITE:
+        w = 'w'
+    else:
+        w = ''
+
+    if num & AccessMode.MAY_APPEND:
+        a = 'a'
+    else:
+        a = ''
+
+    if num & AccessMode.MAY_EXEC:
+        x = 'x'
+    else:
+        x = ''
+
+    return ''.join([r, w, a, x])
 
 
 def get_inode_and_device(path, follow_symlink=True):

@@ -54,7 +54,7 @@ struct bpfbox_process *create_process(void *ctx, u32 pid, u32 tgid)
 
 static __always_inline
 int fs_enforce(void *ctx, struct bpfbox_process *process,
-    struct bpfbox_profile *profile, u32 inode, u32 dir_inode, u32 st_dev, int access)
+    struct bpfbox_profile *profile, u32 inode, u32 parent_inode, u32 st_dev, int access)
 {
     #ifdef BPFBOX_ENFORCING
     bpf_send_signal(SIGKILL);
@@ -72,7 +72,7 @@ int fs_enforce(void *ctx, struct bpfbox_process *process,
     event.profile_key = process->profile_key;
 
     event.inode = inode;
-    event.dir_inode = dir_inode;
+    event.parent_inode = parent_inode;
     event.st_dev = st_dev;
     event.access = access;
 
