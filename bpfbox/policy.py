@@ -4,9 +4,6 @@ import stat
 from textwrap import dedent
 import ctypes as ct
 
-# TODO: we don't want glob in the final product, use our own syntax instead
-from glob import glob
-
 from bcc import BPF
 
 from bpfbox.bpf.structs import BPFBoxProfileStruct
