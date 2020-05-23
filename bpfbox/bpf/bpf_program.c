@@ -8,6 +8,7 @@
 
 BPF_PERF_OUTPUT(on_process_create); // TODO: either link or delete this
 BPF_PERF_OUTPUT(on_fs_enforcement);
+BPF_PERF_OUTPUT(on_net_enforcement);
 
 /* ========================================================================= *
  * Map Definitions                                                           *
@@ -34,7 +35,7 @@ BPF_PROG_ARRAY(net_policy, BPFBOX_MAX_PROFILES);
 /* This array holds intermediate values between entry and exit points to
  * do_filp_open */
 BPF_ARRAY(__do_filp_open_intermediate, struct open_flags, 1);
-BPF_ARRAY(__net_intermediate, struct bpfbox_net_intermediate, 1);
+//BPF_ARRAY(__net_intermediate, struct bpfbox_net_intermediate, 1);
 
 /* ========================================================================= *
  * Helper Functions                                                          *
@@ -87,7 +88,7 @@ int fs_enforce(void *ctx, struct bpfbox_process *process,
 
 static __always_inline
 int net_enforce(void *ctx, struct bpfbox_process *process,
-    struct bpfbox_profile *profile, struct bpfbox_net_intermediate *net)
+    struct bpfbox_profile *profile)
 {
     #ifdef BPFBOX_ENFORCING
     bpf_send_signal(SIGKILL);

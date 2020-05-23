@@ -1,6 +1,8 @@
 import os
 import sys
 import itertools
+import signal
+import subprocess
 
 from bcc import syscall
 
@@ -148,3 +150,45 @@ def powerperm(ell):
     )
     perms = map(lambda p: ''.join(list(p)), perms)
     return list(perms)
+
+
+def which(binary):
+    """
+    Find a binary if it exists.
+    """
+    try:
+        w = subprocess.Popen(
+            ["which", binary], stdout=subprocess.PIPE, stderr=subprocess.PIPE
+        )
+        res = w.stdout.readlines()
+        if len(res) == 0:
+            raise Exception(f"{binary} not found")
+        return os.path.realpath(res[0].strip())
+    except Exception:
+        if os.path.isfile(binary):
+            return os.path.realpath(binary)
+        else:
+            raise Exception(f"{binary} not found")
+
+
+@drop_privileges
+def run_binary(args_str):
+    """
+    Drop privileges and run a binary if it exists.
+    """
+    # Wake up and do nothing on SIGCLHD
+    signal.signal(signal.SIGUSR1, lambda x, y: None)
+    # Reap zombies
+    signal.signal(signal.SIGCHLD, lambda x, y: os.wait())
+    args = args_str.split()
+    try:
+        binary = which(args[0])
+    except Exception:
+        return -1
+    pid = os.fork()
+    # Setup traced process
+    if pid == 0:
+        signal.pause()
+        os.execvp(binary, args)
+    # Return pid of traced process
+    return pid
