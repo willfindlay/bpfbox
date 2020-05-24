@@ -14,6 +14,7 @@ from bpfbox.utils import get_inode_and_device
 from bpfbox import defs
 
 DRIVERPATH = os.path.join(defs.project_path, 'tests/driver')
+OPENPATH = os.path.join(DRIVERPATH, 'open')
 POLICY = BPFBoxLoggerClass.POLICY
 
 
@@ -34,22 +35,22 @@ def bpfboxd(caplog):
 
 
 def test_fs_implicit_taint(bpfboxd: BPFBoxd, caplog):
-    p = Policy(os.path.join(DRIVERPATH, 'open'))
+    p = Policy(OPENPATH)
     bpfboxd.policy.append(p)
     bpfboxd.load_bpf()
 
-    rc = subprocess.Popen(os.path.join(DRIVERPATH, 'open')).wait()
+    rc = subprocess.Popen(OPENPATH).wait()
 
     assert rc == -9
 
 
 def test_fs_taint(bpfboxd: BPFBoxd, caplog):
-    p = Policy(os.path.join(DRIVERPATH, 'open'))
+    p = Policy(OPENPATH)
     p.fs_taint('/tmp/bpfbox/a', AccessMode.MAY_READ)
     bpfboxd.policy.append(p)
     bpfboxd.load_bpf()
 
-    rc = subprocess.Popen(os.path.join(DRIVERPATH, 'open')).wait()
+    rc = subprocess.Popen(OPENPATH).wait()
     bpfboxd.bpf.perf_buffer_poll(20)
 
     assert rc == -9
@@ -65,13 +66,13 @@ def test_fs_taint(bpfboxd: BPFBoxd, caplog):
 
 
 def test_allow_read(bpfboxd: BPFBoxd, caplog):
-    p = Policy(os.path.join(DRIVERPATH, 'open'))
+    p = Policy(OPENPATH)
     p.fs_taint('/tmp/bpfbox/a', AccessMode.MAY_READ)
     p.fs_allow('/tmp/bpfbox/a', AccessMode.MAY_READ)
     bpfboxd.policy.append(p)
     bpfboxd.load_bpf()
 
-    rc = subprocess.Popen(os.path.join(DRIVERPATH, 'open')).wait()
+    rc = subprocess.Popen(OPENPATH).wait()
     bpfboxd.bpf.perf_buffer_poll(20)
 
     assert rc == -9
@@ -87,14 +88,14 @@ def test_allow_read(bpfboxd: BPFBoxd, caplog):
 
 
 def test_allow_write(bpfboxd: BPFBoxd, caplog):
-    p = Policy(os.path.join(DRIVERPATH, 'open'))
+    p = Policy(OPENPATH)
     p.fs_taint('/tmp/bpfbox/a', AccessMode.MAY_READ)
     p.fs_allow('/tmp/bpfbox/a', AccessMode.MAY_READ)
     p.fs_allow('/tmp/bpfbox/b', AccessMode.MAY_WRITE)
     bpfboxd.policy.append(p)
     bpfboxd.load_bpf()
 
-    rc = subprocess.Popen(os.path.join(DRIVERPATH, 'open')).wait()
+    rc = subprocess.Popen(OPENPATH).wait()
     bpfboxd.bpf.perf_buffer_poll(20)
 
     assert rc == -9
@@ -110,7 +111,7 @@ def test_allow_write(bpfboxd: BPFBoxd, caplog):
 
 
 def test_rw_when_rdonly_allowed(bpfboxd: BPFBoxd, caplog):
-    p = Policy(os.path.join(DRIVERPATH, 'open'))
+    p = Policy(OPENPATH)
     p.fs_taint('/tmp/bpfbox/a', AccessMode.MAY_READ)
     p.fs_allow('/tmp/bpfbox/a', AccessMode.MAY_READ)
     p.fs_allow('/tmp/bpfbox/b', AccessMode.MAY_WRITE)
@@ -118,7 +119,7 @@ def test_rw_when_rdonly_allowed(bpfboxd: BPFBoxd, caplog):
     bpfboxd.policy.append(p)
     bpfboxd.load_bpf()
 
-    rc = subprocess.Popen(os.path.join(DRIVERPATH, 'open')).wait()
+    rc = subprocess.Popen(OPENPATH).wait()
     bpfboxd.bpf.perf_buffer_poll(20)
 
     assert rc == -9
@@ -134,7 +135,7 @@ def test_rw_when_rdonly_allowed(bpfboxd: BPFBoxd, caplog):
 
 
 def test_rw_when_wronly_allowed(bpfboxd: BPFBoxd, caplog):
-    p = Policy(os.path.join(DRIVERPATH, 'open'))
+    p = Policy(OPENPATH)
     p.fs_taint('/tmp/bpfbox/a', AccessMode.MAY_READ)
     p.fs_allow('/tmp/bpfbox/a', AccessMode.MAY_READ)
     p.fs_allow('/tmp/bpfbox/b', AccessMode.MAY_WRITE)
@@ -142,7 +143,7 @@ def test_rw_when_wronly_allowed(bpfboxd: BPFBoxd, caplog):
     bpfboxd.policy.append(p)
     bpfboxd.load_bpf()
 
-    rc = subprocess.Popen(os.path.join(DRIVERPATH, 'open')).wait()
+    rc = subprocess.Popen(OPENPATH).wait()
     bpfboxd.bpf.perf_buffer_poll(20)
 
     assert rc == -9
@@ -158,7 +159,7 @@ def test_rw_when_wronly_allowed(bpfboxd: BPFBoxd, caplog):
 
 
 def test_allow_rw(bpfboxd: BPFBoxd, caplog):
-    p = Policy(os.path.join(DRIVERPATH, 'open'))
+    p = Policy(OPENPATH)
     p.fs_taint('/tmp/bpfbox/a', AccessMode.MAY_READ)
     p.fs_allow('/tmp/bpfbox/a', AccessMode.MAY_READ)
     p.fs_allow('/tmp/bpfbox/b', AccessMode.MAY_WRITE)
@@ -166,7 +167,7 @@ def test_allow_rw(bpfboxd: BPFBoxd, caplog):
     bpfboxd.policy.append(p)
     bpfboxd.load_bpf()
 
-    rc = subprocess.Popen(os.path.join(DRIVERPATH, 'open')).wait()
+    rc = subprocess.Popen(OPENPATH).wait()
     bpfboxd.bpf.perf_buffer_poll(20)
 
     assert rc == -9
@@ -182,7 +183,7 @@ def test_allow_rw(bpfboxd: BPFBoxd, caplog):
 
 
 def test_allow_append(bpfboxd: BPFBoxd, caplog):
-    p = Policy(os.path.join(DRIVERPATH, 'open'))
+    p = Policy(OPENPATH)
     p.fs_taint('/tmp/bpfbox/a', AccessMode.MAY_READ)
     p.fs_allow('/tmp/bpfbox/a', AccessMode.MAY_READ)
     p.fs_allow('/tmp/bpfbox/b', AccessMode.MAY_WRITE)
@@ -191,7 +192,7 @@ def test_allow_append(bpfboxd: BPFBoxd, caplog):
     bpfboxd.policy.append(p)
     bpfboxd.load_bpf()
 
-    rc = subprocess.Popen(os.path.join(DRIVERPATH, 'open')).wait()
+    rc = subprocess.Popen(OPENPATH).wait()
     bpfboxd.bpf.perf_buffer_poll(20)
 
     assert rc == -9
@@ -207,7 +208,7 @@ def test_allow_append(bpfboxd: BPFBoxd, caplog):
 
 
 def test_allow_exec(bpfboxd: BPFBoxd, caplog):
-    p = Policy(os.path.join(DRIVERPATH, 'open'))
+    p = Policy(OPENPATH)
     p.fs_taint('/tmp/bpfbox/a', AccessMode.MAY_READ)
     p.fs_allow('/tmp/bpfbox/a', AccessMode.MAY_READ)
     p.fs_allow('/tmp/bpfbox/b', AccessMode.MAY_WRITE)
@@ -217,14 +218,14 @@ def test_allow_exec(bpfboxd: BPFBoxd, caplog):
     bpfboxd.policy.append(p)
     bpfboxd.load_bpf()
 
-    rc = subprocess.Popen(os.path.join(DRIVERPATH, 'open')).wait()
+    rc = subprocess.Popen(OPENPATH).wait()
     bpfboxd.bpf.perf_buffer_poll(20)
 
     assert rc == 0
 
 
 def test_extra_access_modes(bpfboxd: BPFBoxd, caplog):
-    p = Policy(os.path.join(DRIVERPATH, 'open'))
+    p = Policy(OPENPATH)
     p.fs_taint('/tmp/bpfbox/a', AccessMode.MAY_READ)
     p.fs_allow(
         '/tmp/bpfbox/a',
@@ -236,7 +237,7 @@ def test_extra_access_modes(bpfboxd: BPFBoxd, caplog):
     bpfboxd.policy.append(p)
     bpfboxd.load_bpf()
 
-    rc = subprocess.Popen(os.path.join(DRIVERPATH, 'open')).wait()
+    rc = subprocess.Popen(OPENPATH).wait()
     bpfboxd.bpf.perf_buffer_poll(20)
 
     assert rc == -9
