@@ -51,7 +51,6 @@ int fs_policy_PROFILEKEY(struct pt_regs *ctx) {
      * For now, we will go with option 1, but this is something that should be
      * revisited before release. TODO: discuss with Anil
      * */
-
     if (!inode && !parent_inode && !st_dev) return 0;
 
 #ifdef BPFBOX_DEBUG
