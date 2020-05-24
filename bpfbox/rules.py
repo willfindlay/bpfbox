@@ -12,6 +12,12 @@ class AccessMode(enum.IntFlag):
     MAY_WRITE = 0x02
     MAY_READ = 0x04
     MAY_APPEND = 0x08
+    MAY_ACCESS = 0x10
+    MAY_OPEN = 0x20
+    MAY_CHDIR = 0x40
+    # For non-blocking RCU
+    # (perhaps we want to modify access_predicate to ignore this)
+    MAY_NOT_BLOCK = 0x80
 
 
 class Rule:
