@@ -4,9 +4,6 @@ import stat
 from textwrap import dedent
 import ctypes as ct
 
-# TODO: we don't want glob in the final product, use our own syntax instead
-from glob import glob
-
 from bcc import BPF
 
 from bpfbox.bpf.structs import BPFBoxProfileStruct
@@ -69,15 +66,17 @@ class Policy:
         Register BPF program with tail call index.
         """
         # fs policy
-        fn = bpf.load_func(f'fs_policy_{self.profile_key}', BPF.KPROBE)
-        bpf['fs_policy'][ct.c_int(self.tail_call_index)] = ct.c_int(fn.fd)
+        fn = bpf.load_func(
+            f'fs_policy_{self.profile_key}'.encode('utf-8'), BPF.KPROBE
+        )
+        bpf[b'fs_policy'][ct.c_int(self.tail_call_index)] = ct.c_int(fn.fd)
         # TODO other policy types here
 
     def register_profile_struct(self, bpf):
         """
         Generate and register profile struct with BPF program.
         """
-        bpf['profiles'][
+        bpf[b'profiles'][
             ct.c_uint64(self.profile_key)
         ] = self._generate_profile_struct()
 
@@ -97,8 +96,7 @@ class Policy:
         """
         Return True if we have no taint rules, False otherwise
         """
-        # TODO: check all taint rules
-        return True
+        return not self.fs_taint_rules  # TODO "and" with other taint rules
 
     def _generate_profile_struct(self):
         """

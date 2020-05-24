@@ -15,6 +15,7 @@ from bpfbox.logger import get_logger
 from bpfbox.utils import syscall_name, access_name
 from bpfbox.policy import Policy
 from bpfbox.rules import AccessMode
+from bpfbox.argument_parser import parse_args
 
 logger = get_logger()
 
@@ -40,20 +41,11 @@ class BPFBoxd(DaemonMixin):
         # programs TODO: maybe use a generator instead
         self.policy = []
 
-        # FIXME: get rid of this, just testing
-        p = Policy('/usr/bin/ls')
-        # p.fs_taint('/etc/ld.so.cache', AccessMode.MAY_READ)
-        p.fs_allow('/etc/ld.so.cache', AccessMode.MAY_READ)
-        p.fs_allow('/usr/lib/libcap.so.2', AccessMode.MAY_READ)
-        p.fs_allow('/usr/lib/locale/locale-archive', AccessMode.MAY_READ)
-        p.fs_allow('/usr/lib/libc.so.6', AccessMode.MAY_READ)
-        p.fs_allow(
-            '/home/housedhorse/documents/projects/bpfbox', AccessMode.MAY_READ
-        )
-        self.policy.append(p)
-
     def reload_bpf(self):
-        self.bpf.cleanup()
+        try:
+            self.cleanup()
+        except AttributeError:
+            pass
         self.bpf = None
         self.load_bpf(maps_pinned=True)
 
@@ -72,36 +64,45 @@ class BPFBoxd(DaemonMixin):
         flags.append(f'-I{defs.project_path}')
         # Handle enforcing mode
         if self.enforcing:
-            logger.debug('Loading BPF program in enforcing mode')
+            logger.debug('BPF program will be loaded in enforcing mode')
             flags.append(f'-DBPFBOX_ENFORCING')
         else:
-            logger.debug('Loading BPF program in permissive mode')
+            logger.debug('BPF program will be loaded in permissive mode')
         # Handle pinned maps
         if maps_pinned:
-            logger.debug('Loading BPF program using pinned maps')
             flags.append(f'-DMAPS_PINNED')
+        if self.debug:
+            flags.append(f'-DBPFBOX_DEBUG')
+
+        logger.debug(f'Using flags {" ".join(flags)}')
 
         # Generate policy and register binary names
+        logger.debug('Generating policy...')
         for policy in self.policy:
             self.profile_key_to_exe[policy.profile_key] = policy.binary
             source = '\n'.join([source, policy.generate_bpf_program()])
 
         # Load the bpf program
-        self.bpf = BPF(text=source, cflags=flags)
+        logger.debug('Loading BPF program...')
+        self.bpf = BPF(text=source.encode('utf-8'), cflags=flags)
 
         # Register tail call programs and profile structs
+        logger.debug('Registering tail calls...')
         for policy in self.policy:
             policy.register_tail_calls(self.bpf)
             policy.register_profile_struct(self.bpf)
 
         # Register exit hooks
+        logger.debug('Registering exit hooks...')
         atexit.register(self.cleanup)
 
         # Register perf buffers
+        logger.debug('Registering perf buffers...')
         self.register_perf_buffers()
 
         # Pin maps
         if not maps_pinned:
+            logger.debug('Pinnings maps...')
             self.pin_map('on_fs_enforcement')
 
     def register_perf_buffers(self):
@@ -110,7 +111,7 @@ class BPFBoxd(DaemonMixin):
         """
 
         def on_fs_enforcement(cpu, data, size):
-            event = self.bpf['on_fs_enforcement'].event(data)
+            event = self.bpf[b'on_fs_enforcement'].event(data)
             enforcement_prefix = (
                 'Enforcing' if event.enforcing else 'Would have enforced'
             )
@@ -122,7 +123,7 @@ class BPFBoxd(DaemonMixin):
                 f'st_dev={event.st_dev}, access={access_name(event.access)}'
             )
 
-        self.bpf['on_fs_enforcement'].open_perf_buffer(on_fs_enforcement)
+        self.bpf[b'on_fs_enforcement'].open_perf_buffer(on_fs_enforcement)
 
     def pin_map(self, name):
         """
@@ -135,7 +136,9 @@ class BPFBoxd(DaemonMixin):
             os.unlink(fn)
 
         # pin the map
-        ret = lib.bpf_obj_pin(self.bpf[name].map_fd, fn.encode('utf-8'))
+        ret = lib.bpf_obj_pin(
+            self.bpf[name.encode('utf-8')].map_fd, fn.encode('utf-8')
+        )
         if ret:
             logger.error(
                 f"Could not pin map {name}: {os.strerror(ct.get_errno())}"
@@ -145,23 +148,25 @@ class BPFBoxd(DaemonMixin):
         """
         Write all profile data to disk.
         """
-        pass
+        # TODO
 
     def save_profile(self):
         """
         Save one profile's data to disk.
         """
+        # TODO
 
     def load_profiles(self):
         """
         Load all profile data from disk.
         """
-        pass
+        # TODO
 
     def load_profile(self):
         """
         Load one profile's data from disk.
         """
+        # TODO
 
     def dump_debug_data(self):
         """
@@ -174,12 +179,12 @@ class BPFBoxd(DaemonMixin):
 
         # Dump profiles TODO
         logger.debug('Dumping profiles...')
-        for key, profile in self.bpf['profiles'].iteritems():
+        for key, profile in self.bpf[b'profiles'].iteritems():
             logger.debug(key)
 
         # Dump processes TODO
         logger.debug('Dumping processes...')
-        for key, process in self.bpf['processes'].iteritems():
+        for key, process in self.bpf[b'processes'].iteritems():
             logger.debug(key)
 
     def cleanup(self):
@@ -188,7 +193,10 @@ class BPFBoxd(DaemonMixin):
         """
         self.dump_debug_data()
         self.save_profiles()
-        self.bpf = None
+        try:
+            self.bpf.cleanup()
+        except AttributeError:
+            logger.warning("Unable to properly clean up BPF program")
 
     def trace_print(self):
         """
@@ -221,11 +229,12 @@ class BPFBoxd(DaemonMixin):
             time.sleep(self.ticksleep)
 
 
-def main(args):
+def main(args=sys.argv[1:]):
     """
     Main entrypoint for BPFBox daemon.
     Generally should be invoked with parse_args.
     """
+    args = parse_args(args)
     defs.init(args)
     b = BPFBoxd(args)
 

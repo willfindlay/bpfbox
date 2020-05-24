@@ -1,28 +1,23 @@
 /* fs_policy template */
 
-int fs_policy_PROFILEKEY(struct pt_regs *ctx)
-{
+int fs_policy_PROFILEKEY(struct pt_regs *ctx) {
     // Lookup process
     u32 pid = bpf_get_current_pid_tgid();
     struct bpfbox_process *process = processes.lookup(&pid);
-    if (!process)
-        return 0;
+    if (!process) return 0;
 
     // Look up profile
     struct bpfbox_profile *profile = profiles.lookup(&process->profile_key);
-    if (!profile)
-        return 0;
+    if (!profile) return 0;
 
     // Yoink file pointer from return value
-    struct file *fp = (struct file*)PT_REGS_RC(ctx);
-    if (!fp)
-        return 0;
+    struct file *fp = (struct file *)PT_REGS_RC(ctx);
+    if (fp <= 0) return 0;
 
     // Access the open_flags struct from the entrypoint arguments
     int zero = 0;
     struct open_flags *op = __do_filp_open_intermediate.lookup(&zero);
-    if (!op)
-        return 0;
+    if (op <= 0) return 0;
 
     // Extract file inode and parent dir inode
     struct dentry *dentry = fp->f_path.dentry;
@@ -34,22 +29,49 @@ int fs_policy_PROFILEKEY(struct pt_regs *ctx)
     // Extract access mode
     int acc_mode = op->acc_mode;
 
+    /*
+     * Potentially an interesting design choice here:
+     * When we encounter an inode, parent inode, and st_dev of 0,
+     * it means that we ran into a permission error opening the file.
+     *
+     * We have two choices here:
+     * 1. Simply return at this point, as the OS' reference monitor should allow
+     *    the application to fail gracefully.
+     * 2. Continue and call fs_enforce with 100% probability, even if the user
+     *    specified a rule to allow such behavior.
+     *
+     * Neither of these options seems ideal. In case 1, the user may have been
+     * expecting bpfbox to outright kill the application in question. Allowing
+     * the application to continue (even though the open failed) may constituted
+     * an unexpected result.
+     *
+     * Similarly, in case 2, the user may not be expecting the application to
+     * die if they specified a rule that should allow the behavior to continue.
+     *
+     * For now, we will go with option 1, but this is something that should be
+     * revisited before release. TODO: discuss with Anil
+     * */
+
+    if (!inode && !parent_inode && !st_dev) return 0;
+
+#ifdef BPFBOX_DEBUG
+    bpf_trace_printk("opening with mode %d inode %u std_dev %u\n", acc_mode,
+                     inode, st_dev);
+#endif
+
     // Apply taint rules if not tainted
-    if (!process->tainted)
-    {
-        if (FS_TAINT_RULES)
-        {
+    if (!process->tainted) {
+        if (FS_TAINT_RULES) {
             process->tainted = 1;
             return 0;
         }
     }
 
     // Enforce policy if tainted
-    if (process->tainted)
-    {
-        if (!(FS_ALLOW_RULES))
-        {
-            fs_enforce(ctx, process, profile, inode, parent_inode, st_dev, acc_mode);
+    if (process->tainted) {
+        if (!(FS_ALLOW_RULES)) {
+            fs_enforce(ctx, process, profile, inode, parent_inode, st_dev,
+                       acc_mode);
             return 0;
         }
     }
