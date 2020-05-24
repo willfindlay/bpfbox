@@ -7,12 +7,13 @@ CFLAGS =
 EXES   = networking open
 
 .PHONY: all
-all: testfiles $(EXES)
+all: $(EXES)
 
 .PHONY: clean
 clean:
 	rm -f $(EXES) *.o
 
+.PHONY: testfiles
 testfiles:
 	mkdir -p $(TESTFILESDIR)
 	touch $(TESTFILESDIR)/a
@@ -24,5 +25,5 @@ testfiles:
 networking: networking.c
 	$(CC) $(CFLAGS) $(LDFLAGS) -o networking networking.c
 
-open: open.c
+open: open.c | testfiles
 	$(CC) $(CFLAGS) $(LDFLAGS) -o open open.c
