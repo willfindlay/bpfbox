@@ -42,7 +42,10 @@ class BPFBoxd(DaemonMixin):
         self.policy = []
 
     def reload_bpf(self):
-        self.bpf.cleanup()
+        try:
+            self.cleanup()
+        except AttributeError:
+            pass
         self.bpf = None
         self.load_bpf(maps_pinned=True)
 
@@ -61,14 +64,17 @@ class BPFBoxd(DaemonMixin):
         flags.append(f'-I{defs.project_path}')
         # Handle enforcing mode
         if self.enforcing:
-            logger.debug('Loading BPF program in enforcing mode')
+            logger.debug('BPF program will be loaded in enforcing mode')
             flags.append(f'-DBPFBOX_ENFORCING')
         else:
-            logger.debug('Loading BPF program in permissive mode')
+            logger.debug('BPF program will be loaded in permissive mode')
         # Handle pinned maps
         if maps_pinned:
-            logger.debug('Loading BPF program using pinned maps')
             flags.append(f'-DMAPS_PINNED')
+        if self.debug:
+            flags.append(f'-DBPFBOX_DEBUG')
+
+        logger.debug(f'Using flags {" ".join(flags)}')
 
         # Generate policy and register binary names
         logger.debug('Generating policy...')
@@ -187,7 +193,10 @@ class BPFBoxd(DaemonMixin):
         """
         self.dump_debug_data()
         self.save_profiles()
-        self.bpf = None
+        try:
+            self.bpf.cleanup()
+        except AttributeError:
+            logger.warning("Unable to properly clean up BPF program")
 
     def trace_print(self):
         """

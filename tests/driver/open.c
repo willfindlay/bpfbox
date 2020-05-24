@@ -8,6 +8,8 @@ int main() {
 
     fd = open("/tmp/bpfbox/a", O_RDONLY);
     close(fd);
+    fd = open("/tmp/bpfbox/a", O_RDONLY);
+    close(fd);
     fd = open("/tmp/bpfbox/b", O_WRONLY);
     close(fd);
     fd = open("/tmp/bpfbox/c", O_RDWR);

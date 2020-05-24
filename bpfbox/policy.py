@@ -96,8 +96,7 @@ class Policy:
         """
         Return True if we have no taint rules, False otherwise
         """
-        # TODO: check all taint rules
-        return True
+        return not self.fs_taint_rules  # TODO "and" with other taint rules
 
     def _generate_profile_struct(self):
         """

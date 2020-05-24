@@ -19,6 +19,7 @@ testfiles:
 	touch $(TESTFILESDIR)/b
 	touch $(TESTFILESDIR)/c
 	touch $(TESTFILESDIR)/d
+	chmod +x $(TESTFILESDIR)/d
 
 networking: networking.c
 	$(CC) $(CFLAGS) $(LDFLAGS) -o networking networking.c

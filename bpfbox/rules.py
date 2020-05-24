@@ -44,5 +44,5 @@ class FSRule(Rule):
             )
         else:
             file_predicate = f'(inode == {st_ino} && st_dev == {st_dev})'
-        access_predicate = f'(acc_mode & {self.mode})'
+        access_predicate = f'((acc_mode & {self.mode}) == acc_mode)'
         return f'({file_predicate} && {access_predicate})'
