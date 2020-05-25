@@ -1,3 +1,27 @@
+"""
+    🐝 BPFBox 📦  Application-transparent sandboxing rules with eBPF.
+    Copyright (C) 2020  William Findlay
+
+    This program is free software: you can redistribute it and/or modify
+    it under the terms of the GNU General Public License as published by
+    the Free Software Foundation, either version 3 of the License, or
+    (at your option) any later version.
+
+    This program is distributed in the hope that it will be useful,
+    but WITHOUT ANY WARRANTY; without even the implied warranty of
+    MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+    GNU General Public License for more details.
+
+    You should have received a copy of the GNU General Public License
+    along with this program.  If not, see <https://www.gnu.org/licenses/>.
+
+    William Findlay created this.
+        williamfindlay <àŧ> cmail.carleton.ca
+
+    This file defines the userspace representation of BPFBox rules
+    and several enums that can be used to define them.
+"""
+
 import os
 import enum
 from abc import ABC, abstractmethod
@@ -5,9 +29,13 @@ from abc import ABC, abstractmethod
 from bpfbox.utils import get_inode_and_device
 
 
-# linux/fs.h
 @enum.unique
 class AccessMode(enum.IntFlag):
+    """
+    Access mode bitmask from linux/fs.h,
+    used in filesystem rules for generation of predicates.
+    """
+
     MAY_EXEC = 0x01
     MAY_WRITE = 0x02
     MAY_READ = 0x04
@@ -21,6 +49,10 @@ class AccessMode(enum.IntFlag):
 
 
 class Rule:
+    """
+    This abstract class represents the standard interface of a bpfbox rule.
+    """
+
     def __init__(self):
         pass
 
@@ -30,6 +62,11 @@ class Rule:
 
 
 class FSRule(Rule):
+    """
+    This class forms the userspace representation of a filesystem access rule.
+    It is used to generate the predicates used in the tail called BPF program.
+    """
+
     def __init__(self, path: str, mode: AccessMode):
         assert isinstance(path, str)
         assert isinstance(mode, AccessMode)
@@ -52,3 +89,13 @@ class FSRule(Rule):
             file_predicate = f'(inode == {st_ino} && st_dev == {st_dev})'
         access_predicate = f'((acc_mode & {self.mode}) == acc_mode)'
         return f'({file_predicate} && {access_predicate})'
+
+
+class NetRule(Rule):
+    """
+    This class forms the userspace representation of a network rule.
+    It is used to generate the predicates used in the tail called BPF program.
+    """
+
+    # TODO
+    pass

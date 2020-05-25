@@ -1,3 +1,26 @@
+"""
+    🐝 BPFBox 📦  Application-transparent sandboxing rules with eBPF.
+    Copyright (C) 2020  William Findlay
+
+    This program is free software: you can redistribute it and/or modify
+    it under the terms of the GNU General Public License as published by
+    the Free Software Foundation, either version 3 of the License, or
+    (at your option) any later version.
+
+    This program is distributed in the hope that it will be useful,
+    but WITHOUT ANY WARRANTY; without even the implied warranty of
+    MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+    GNU General Public License for more details.
+
+    You should have received a copy of the GNU General Public License
+    along with this program.  If not, see <https://www.gnu.org/licenses/>.
+
+    William Findlay created this.
+        williamfindlay <àŧ> cmail.carleton.ca
+
+    This file provides the parse_args subroutine to bpfboxd.
+"""
+
 import os, sys
 import argparse
 
@@ -12,40 +35,67 @@ EPILOG = """
 """
 
 OPERATIONS = [
-        'start',
-        'stop',
-        'restart',
-        ]
+    'start',
+    'stop',
+    'restart',
+]
+
 
 def parse_args(sysargs=sys.argv[1:]):
-    parser = argparse.ArgumentParser(description=DESCRIPTION, epilog=EPILOG,
-            formatter_class=argparse.RawDescriptionHelpFormatter)
+    parser = argparse.ArgumentParser(
+        description=DESCRIPTION,
+        epilog=EPILOG,
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+    )
 
     # Setup arguments
     # Operations
     operations = parser.add_argument_group('operations')
     operation = operations.add_mutually_exclusive_group()
-    operation.add_argument('operation', choices=OPERATIONS, nargs='?',
-            help='Operation to perform. One of ' + ', '.join(OPERATIONS) + '.')
-    operation.add_argument('--nodaemon', action='store_true',
-            help='Run as a foreground process instead of daemonizing. '
-            'Required if not specifying an operation.')
+    operation.add_argument(
+        'operation',
+        choices=OPERATIONS,
+        nargs='?',
+        help='Operation to perform. One of ' + ', '.join(OPERATIONS) + '.',
+    )
+    operation.add_argument(
+        '--nodaemon',
+        action='store_true',
+        help='Run as a foreground process instead of daemonizing. '
+        'Required if not specifying an operation.',
+    )
     # Enforcement options
     enforcement = parser.add_argument_group('enforcement')
     enforcement_mode = enforcement.add_mutually_exclusive_group()
-    enforcement_mode.add_argument('--enforcing', action='store_const', dest='enforcing', const=True, default=True,
-            help='Run in enforcing mode. Kill all enforcing processes that violate policy.')
-    enforcement_mode.add_argument('--permissive', action='store_const', dest='enforcing', const=False,
-            help='Run in permissive mode. Write violations to logs, but do not kill them.')
+    enforcement_mode.add_argument(
+        '--enforcing',
+        action='store_const',
+        dest='enforcing',
+        const=True,
+        default=True,
+        help='Run in enforcing mode. Kill all enforcing processes that violate policy.',
+    )
+    enforcement_mode.add_argument(
+        '--permissive',
+        action='store_const',
+        dest='enforcing',
+        const=False,
+        help='Run in permissive mode. Write violations to logs, but do not kill them.',
+    )
     # Logging options
     log_options = parser.add_argument_group('logging')
     verbosity = log_options.add_mutually_exclusive_group()
-    verbosity.add_argument('--verbose', '-v', action='store_true',
-            help='Log in verbose mode.')
-    verbosity.add_argument('--debug', action='store_true',
-            help='Log in debug mode.')
-    log_options.add_argument('--stdout', action='store_true',
-            help='Write to terminal instead of log file. Only makes sense when running with --nodaemon.')
+    verbosity.add_argument(
+        '--verbose', '-v', action='store_true', help='Log in verbose mode.'
+    )
+    verbosity.add_argument(
+        '--debug', action='store_true', help='Log in debug mode.'
+    )
+    log_options.add_argument(
+        '--stdout',
+        action='store_true',
+        help='Write to terminal instead of log file. Only makes sense when running with --nodaemon.',
+    )
     # Miscellaneous options
     misc_options = parser.add_argument_group('misc.')
 
