@@ -29,7 +29,7 @@ import signal
 import time
 import ctypes as ct
 from collections import defaultdict
-from typing import List
+from typing import List, NoReturn
 
 from bcc import BPF
 from bcc.libbcc import lib
@@ -214,33 +214,82 @@ class BPFBoxd(DaemonMixin):
                 f"Could not pin map {name}: {os.strerror(ct.get_errno())}"
             )
 
-    def save_profiles(self):
-        """
+    def save_profiles(self) -> None:
+        """save_profiles.
+
         Write all profile data to disk.
-        """
-        # TODO
+        TODO: implement this
 
-    def save_profile(self):
+        Parameters
+        ----------
+
+        Returns
+        -------
+        None
+
         """
+        pass
+
+    def save_profile(self) -> None:
+        """save_profile.
+
         Save one profile's data to disk.
-        """
-        # TODO
+        TODO: implement this
 
-    def load_profiles(self):
+        Parameters
+        ----------
+
+        Returns
+        -------
+        None
+
         """
+        pass
+
+    def load_profiles(self) -> None:
+        """load_profiles.
+
         Load all profile data from disk.
-        """
-        # TODO
+        TODO: implement this
 
-    def load_profile(self):
+        Parameters
+        ----------
+
+        Returns
+        -------
+        None
+
         """
+        pass
+
+    def load_profile(self) -> None:
+        """load_profile.
+
         Load one profile's data from disk.
-        """
-        # TODO
+        TODO: implement this
 
-    def dump_debug_data(self):
+        Parameters
+        ----------
+
+        Returns
+        -------
+        None
+
         """
+        pass
+
+    def dump_debug_data(self) -> None:
+        """dump_debug_data.
+
         Dump debugging data to logs if we are running in debug mode.
+
+        Parameters
+        ----------
+
+        Returns
+        -------
+        None
+
         """
         import logging
 
@@ -257,9 +306,18 @@ class BPFBoxd(DaemonMixin):
         for key, process in self.bpf[b'processes'].iteritems():
             logger.debug(key)
 
-    def cleanup(self):
-        """
+    def cleanup(self) -> None:
+        """cleanup.
+
         Perform cleanup hooks before exit.
+
+        Parameters
+        ----------
+
+        Returns
+        -------
+        None
+
         """
         self.dump_debug_data()
         self.save_profiles()
@@ -268,12 +326,21 @@ class BPFBoxd(DaemonMixin):
         except AttributeError:
             logger.warning("Unable to properly clean up BPF program")
 
-    def trace_print(self):
-        """
+    def trace_print(self) -> None:
+        """trace_print.
+
         Helper to print information from debugfs logfile until we have consumed it entirely.
 
         This is great for debugging, but should not be used in production, since the debugfs logfile
         is shared globally between all BPF programs.
+
+        Parameters
+        ----------
+
+        Returns
+        -------
+        None
+
         """
         while True:
             try:
@@ -287,9 +354,18 @@ class BPFBoxd(DaemonMixin):
                     "Could not correctly parse debug information from debugfs"
                 )
 
-    def loop_forever(self):
-        """
+    def loop_forever(self) -> NoReturn:
+        """loop_forever.
+
         BPFBoxd main event loop.
+
+        Parameters
+        ----------
+
+        Returns
+        -------
+        NoReturn
+
         """
         self.load_bpf()
         while 1:
@@ -299,10 +375,21 @@ class BPFBoxd(DaemonMixin):
             time.sleep(self.ticksleep)
 
 
-def main(args=sys.argv[1:]):
-    """
+def main(args=sys.argv[1:]) -> None:
+    """main.
+
     Main entrypoint for BPFBox daemon.
     Generally should be invoked with parse_args.
+
+    Parameters
+    ----------
+    args :
+        args
+
+    Returns
+    -------
+    None
+
     """
     args = parse_args(args)
     defs.init(args)
