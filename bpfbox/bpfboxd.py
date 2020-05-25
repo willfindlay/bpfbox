@@ -29,6 +29,7 @@ import signal
 import time
 import ctypes as ct
 from collections import defaultdict
+from typing import List
 
 from bcc import BPF
 from bcc.libbcc import lib
@@ -49,12 +50,13 @@ signal.signal(signal.SIGINT, lambda x, y: sys.exit(0))
 
 
 class BPFBoxd(DaemonMixin):
-    """
+    """BPFBoxd.
+
     BPFBox's daemon class.
     Manages BPF programs and reads events in an event loop.
     """
 
-    def __init__(self, args):
+    def __init__(self, args: List[str]):
         self.bpf = None
         self.debug = args.debug
         self.ticksleep = defs.ticksleep
@@ -65,7 +67,19 @@ class BPFBoxd(DaemonMixin):
         # programs TODO: maybe use a generator instead
         self.policy = []
 
-    def reload_bpf(self):
+    def reload_bpf(self) -> None:
+        """reload_bpf.
+
+        Reload the BPF program, performing any necessary cleanup.
+
+        Parameters
+        ----------
+
+        Returns
+        -------
+        None
+
+        """
         try:
             self.cleanup()
         except AttributeError:
@@ -73,9 +87,20 @@ class BPFBoxd(DaemonMixin):
         self.bpf = None
         self.load_bpf(maps_pinned=True)
 
-    def load_bpf(self, maps_pinned=False):
-        """
+    def load_bpf(self, maps_pinned: bool = False) -> None:
+        """load_bpf.
+
         Initialize BPF program.
+
+        Parameters
+        ----------
+        maps_pinned : bool
+            maps_pinned
+
+        Returns
+        -------
+        None
+
         """
         assert self.bpf is None
 
@@ -129,9 +154,18 @@ class BPFBoxd(DaemonMixin):
             logger.debug('Pinnings maps...')
             self.pin_map('on_fs_enforcement')
 
-    def register_perf_buffers(self):
-        """
-        Define and register perf buffers.
+    def register_perf_buffers(self) -> None:
+        """register_perf_buffers.
+
+        Define and register perf buffers with BPF program.
+
+        Parameters
+        ----------
+
+        Returns
+        -------
+        None
+
         """
 
         def on_fs_enforcement(cpu, data, size):
@@ -149,9 +183,21 @@ class BPFBoxd(DaemonMixin):
 
         self.bpf[b'on_fs_enforcement'].open_perf_buffer(on_fs_enforcement)
 
-    def pin_map(self, name):
-        """
-        Pin a map to sysfs so that they can be accessed in subsequent runs.
+    def pin_map(self, name: str) -> None:
+        """pin_map.
+
+        Pin a map <name> to /sys/bpf/<name> so that it can be accessed
+        in subsequent runs.
+
+        Parameters
+        ----------
+        name : str
+            name
+
+        Returns
+        -------
+        None
+
         """
         fn = os.path.join(defs.bpffs, name)
 

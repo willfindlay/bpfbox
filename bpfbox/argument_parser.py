@@ -23,6 +23,7 @@
 
 import os, sys
 import argparse
+from typing import List
 
 from bpfbox.utils import check_root
 
@@ -41,7 +42,21 @@ OPERATIONS = [
 ]
 
 
-def parse_args(sysargs=sys.argv[1:]):
+def parse_args(sysargs: List[str] = sys.argv[1:]) -> argparse.Namespace:
+    """parse_args.
+
+    Parses arguments for bpfboxd.
+
+    Parameters
+    ----------
+    sysargs : List[str]
+        sysargs
+
+    Returns
+    -------
+    argparse.Namespace
+
+    """
     parser = argparse.ArgumentParser(
         description=DESCRIPTION,
         epilog=EPILOG,
