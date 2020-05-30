@@ -25,6 +25,8 @@
 import os
 import enum
 from abc import ABC, abstractmethod
+from netaddr import IPAddress
+from socket import AF_INET, AF_INET6
 
 from bpfbox.utils import get_inode_and_device
 
@@ -61,9 +63,11 @@ class NetOperation(enum.IntEnum):
     """
 
     # bpf/defs.h
-    BIND = 0x1
-    SEND = 0x2
-    RECV = 0x4
+    BIND = 0x01
+    CONNECT = 0x02
+    ACCEPT = 0x04
+    SEND = 0x08
+    RECV = 0x10
 
 
 class Rule:
@@ -119,10 +123,14 @@ class NetRule(Rule):
     """
 
     def __init__(
-        self, addr: str, port: str, operation: NetOperation, action: RuleAction
+        self,
+        addr: IPAddress,
+        port: int,
+        operation: NetOperation,
+        action: RuleAction,
     ):
-        assert isinstance(addr, str)
-        assert isinstance(port, str)
+        assert isinstance(addr, IPAddress)
+        assert isinstance(port, int)
         assert isinstance(operation, NetOperation)
 
         super().__init__(action)

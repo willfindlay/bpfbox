@@ -30,6 +30,8 @@ BPF_TABLE("lru_hash", u64, struct bpfbox_profile, profiles,
 BPF_PROG_ARRAY(fs_policy, BPFBOX_MAX_PROFILES);
 /* These maps hold the rules that will be tail called on net events */
 BPF_PROG_ARRAY(net_bind_policy, BPFBOX_MAX_PROFILES);
+BPF_PROG_ARRAY(net_connect_policy, BPFBOX_MAX_PROFILES);
+BPF_PROG_ARRAY(net_accept_policy, BPFBOX_MAX_PROFILES);
 BPF_PROG_ARRAY(net_send_policy, BPFBOX_MAX_PROFILES);
 BPF_PROG_ARRAY(net_recv_policy, BPFBOX_MAX_PROFILES);
 // TODO: add other policy categories
@@ -238,6 +240,53 @@ int kretprobe__do_filp_open(struct pt_regs *ctx) {
 }
 
 /* Network event entrypoints below this line ------------------------------- */
+
+int kprobe__security_socket_bind(struct pt_regs *ctx, struct socket *sock,
+                                 struct sockaddr *address, int addrlen) {
+    // Check pid and look up process if it exists
+    u32 pid = bpf_get_current_pid_tgid();
+    struct bpfbox_process *process = processes.lookup(&pid);
+    if (!process) return 0;
+
+    // Look up profile
+    struct bpfbox_profile *profile = profiles.lookup(&process->profile_key);
+    if (!profile) return 0;
+
+    net_bind_policy.call(ctx, profile->tail_call_index);
+
+    return 0;
+}
+
+int security_socket_connect(struct pt_regs *ctx, struct socket *sock,
+                            struct sockaddr *address, int addrlen) {
+    // Check pid and look up process if it exists
+    u32 pid = bpf_get_current_pid_tgid();
+    struct bpfbox_process *process = processes.lookup(&pid);
+    if (!process) return 0;
+
+    // Look up profile
+    struct bpfbox_profile *profile = profiles.lookup(&process->profile_key);
+    if (!profile) return 0;
+
+    net_connect_policy.call(ctx, profile->tail_call_index);
+
+    return 0;
+}
+int security_socket_accept(struct pt_regs *ctx, struct socket *sock,
+                           struct socket *newsock) {
+    // Check pid and look up process if it exists
+    u32 pid = bpf_get_current_pid_tgid();
+    struct bpfbox_process *process = processes.lookup(&pid);
+    if (!process) return 0;
+
+    // Look up profile
+    struct bpfbox_profile *profile = profiles.lookup(&process->profile_key);
+    if (!profile) return 0;
+
+    net_accept_policy.call(ctx, profile->tail_call_index);
+
+    return 0;
+}
 
 int kprobe__sock_sendmsg(struct pt_regs *ctx, struct socket *sock,
                          struct msghdr *msg) {

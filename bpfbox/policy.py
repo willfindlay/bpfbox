@@ -235,6 +235,8 @@ class Policy:
 
         text = text.replace('PROFILEKEY', str(self.profile_key))
 
+        # Bind rules -------------------------------------------
+
         text = self._generate_predicate(
             text,
             'BIND_TAINT_RULES',
@@ -251,6 +253,44 @@ class Policy:
             and r.operation == NetOperation.BIND,
         )
 
+        # Connect rules ----------------------------------------
+
+        text = self._generate_predicate(
+            text,
+            'CONNECT_TAINT_RULES',
+            self.net_rules,
+            lambda r: r.action == RuleAction.TAINT
+            and r.operation == NetOperation.CONNECT,
+        )
+
+        text = self._generate_predicate(
+            text,
+            'CONNECT_ALLOW_RULES',
+            self.net_rules,
+            lambda r: r.action == RuleAction.ALLOW
+            and r.operation == NetOperation.CONNECT,
+        )
+
+        # Accept rules -----------------------------------------
+
+        text = self._generate_predicate(
+            text,
+            'ACCEPT_TAINT_RULES',
+            self.net_rules,
+            lambda r: r.action == RuleAction.TAINT
+            and r.operation == NetOperation.ACCEPT,
+        )
+
+        text = self._generate_predicate(
+            text,
+            'ACCEPT_ALLOW_RULES',
+            self.net_rules,
+            lambda r: r.action == RuleAction.ALLOW
+            and r.operation == NetOperation.ACCEPT,
+        )
+
+        # Send rules -------------------------------------------
+
         text = self._generate_predicate(
             text,
             'SEND_TAINT_RULES',
@@ -266,6 +306,8 @@ class Policy:
             lambda r: r.action == RuleAction.ALLOW
             and r.operation == NetOperation.SEND,
         )
+
+        # Recv rules -------------------------------------------
 
         text = self._generate_predicate(
             text,

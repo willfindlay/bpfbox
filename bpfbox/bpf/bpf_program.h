@@ -16,6 +16,8 @@
 #include <linux/binfmts.h>
 
 // socketaddr struct
+#include <linux/net.h>
+#include <net/sock.h>
 #include <linux/socket.h>
 
 // open, openat, openat2 flags
