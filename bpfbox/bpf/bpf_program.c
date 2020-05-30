@@ -29,6 +29,7 @@ BPF_TABLE("lru_hash", u64, struct bpfbox_profile, profiles,
 /* This map holds rules that will be tail called on fs policy events */
 BPF_PROG_ARRAY(fs_policy, BPFBOX_MAX_PROFILES);
 /* These maps hold the rules that will be tail called on net events */
+BPF_PROG_ARRAY(net_bind_policy, BPFBOX_MAX_PROFILES);
 BPF_PROG_ARRAY(net_send_policy, BPFBOX_MAX_PROFILES);
 BPF_PROG_ARRAY(net_recv_policy, BPFBOX_MAX_PROFILES);
 // TODO: add other policy categories
@@ -91,7 +92,8 @@ static inline int fs_enforce(void *ctx, struct bpfbox_process *process,
 
 static __always_inline int net_enforce(void *ctx,
                                        struct bpfbox_process *process,
-                                       struct bpfbox_profile *profile) {
+                                       struct bpfbox_profile *profile,
+                                       int category) {
 #ifdef BPFBOX_ENFORCING
     bpf_send_signal(SIGKILL);
 #endif
@@ -107,10 +109,7 @@ static __always_inline int net_enforce(void *ctx,
     event.tgid = process->tgid;
     event.profile_key = process->profile_key;
 
-    // event.inode = inode;
-    // event.parent_inode = parent_inode;
-    // event.st_dev = st_dev;
-    // event.access = access;
+    event.category = category;
 
     on_net_enforcement.perf_submit(ctx, &event, sizeof(event));
 

@@ -30,6 +30,12 @@ from bpfbox.utils import get_inode_and_device
 
 
 @enum.unique
+class RuleAction(enum.IntEnum):
+    ALLOW = 0x1
+    TAINT = 0x2
+
+
+@enum.unique
 class AccessMode(enum.IntFlag):
     """
     Access mode bitmask from linux/fs.h,
@@ -48,13 +54,26 @@ class AccessMode(enum.IntFlag):
     MAY_NOT_BLOCK = 0x80
 
 
+@enum.unique
+class NetOperation(enum.IntEnum):
+    """
+    Types of network operation we want to mediate.
+    """
+
+    # bpf/defs.h
+    BIND = 0x1
+    SEND = 0x2
+    RECV = 0x4
+
+
 class Rule:
     """
     This abstract class represents the standard interface of a bpfbox rule.
     """
 
-    def __init__(self):
-        pass
+    def __init__(self, action: RuleAction):
+        assert isinstance(action, RuleAction)
+        self.action = action
 
     @abstractmethod
     def generate(self):
@@ -67,10 +86,12 @@ class FSRule(Rule):
     It is used to generate the predicates used in the tail called BPF program.
     """
 
-    def __init__(self, path: str, mode: AccessMode):
+    def __init__(self, path: str, mode: AccessMode, action: RuleAction):
         assert isinstance(path, str)
         assert isinstance(mode, AccessMode)
         assert os.path.exists(path)
+
+        super().__init__(action)
 
         self.path = path
         self.mode = mode
@@ -97,5 +118,18 @@ class NetRule(Rule):
     It is used to generate the predicates used in the tail called BPF program.
     """
 
-    # TODO
-    pass
+    def __init__(
+        self, addr: str, port: str, operation: NetOperation, action: RuleAction
+    ):
+        assert isinstance(addr, str)
+        assert isinstance(port, str)
+        assert isinstance(operation, NetOperation)
+
+        super().__init__(action)
+
+        self.addr = addr
+        self.port = port
+        self.operation = operation
+
+    def generate(self):
+        return f''  # TODO

@@ -99,7 +99,7 @@ struct net_enforcement_event
     u32 inode;
     u32 parent_inode;
     u32 st_dev;
-    int access;
+    int category;
 };
 
 /* ========================================================================= *

@@ -28,6 +28,7 @@ from itertools import count
 import stat
 from textwrap import dedent
 import ctypes as ct
+from typing import List, Callable
 
 from bcc import BPF
 
@@ -35,7 +36,7 @@ from bpfbox.bpf.structs import BPFBoxProfileStruct
 from bpfbox.defs import project_path
 from bpfbox.utils import calculate_profile_key, get_inode_and_device
 from bpfbox.logger import get_logger
-from bpfbox.rules import FSRule, AccessMode
+from bpfbox.rules import Rule, FSRule, AccessMode, RuleAction, NetOperation
 
 logger = get_logger()
 
@@ -44,6 +45,10 @@ TEMPLATE_PATH = os.path.join(project_path, 'bpfbox/bpf/templates')
 # Read template for fs_policy
 with open(os.path.join(TEMPLATE_PATH, 'fs_policy.c'), 'r') as f:
     FS_POLICY_TEMPLATE = f.read()
+
+# Read template for net_policy
+with open(os.path.join(TEMPLATE_PATH, 'net_policy.c'), 'r') as f:
+    NET_POLICY_TEMPLATE = f.read()
 
 
 class Policy:
@@ -63,8 +68,8 @@ class Policy:
         self.profile_key = calculate_profile_key(binary)
         self.binary = binary
 
-        self.fs_allow_rules = []
-        self.fs_taint_rules = []
+        self.fs_rules = []
+        self.net_rules = []
 
     @classmethod
     def from_policy_file(path):
@@ -77,14 +82,28 @@ class Policy:
             pass
             # TODO
 
+    def fs_allow(self, path: str, mode: AccessMode):
+        """
+        Add a filesystem allow rule.
+        """
+        self.fs_rules.append(FSRule(path, mode, RuleAction.ALLOW))
+
+    def fs_taint(self, path: str, mode: AccessMode):
+        """
+        Add a filesystem taint rule.
+        """
+        self.fs_rules.append(FSRule(path, mode, RuleAction.TAINT))
+
     def generate_bpf_program(self):
         """
         Generate the BPF programs based on the policy.
         """
         fs_policy = self._generate_fs_policy()
         logger.debug(fs_policy)
+        net_policy = self._generate_net_policy()
+        logger.debug(net_policy)
         # TODO generate other policy types here
-        return dedent('\n'.join([fs_policy]))
+        return dedent('\n'.join([fs_policy, net_policy]))
 
     def register_tail_calls(self, bpf):
         """
@@ -95,6 +114,25 @@ class Policy:
             f'fs_policy_{self.profile_key}'.encode('utf-8'), BPF.KPROBE
         )
         bpf[b'fs_policy'][ct.c_int(self.tail_call_index)] = ct.c_int(fn.fd)
+        # net bind policy
+        fn = bpf.load_func(
+            f'net_bind_policy_{self.profile_key}'.encode('utf-8'), BPF.KPROBE
+        )
+        bpf[b'net_bind_policy'][ct.c_int(self.tail_call_index)] = ct.c_int(
+            fn.fd
+        )
+        fn = bpf.load_func(
+            f'net_send_policy_{self.profile_key}'.encode('utf-8'), BPF.KPROBE
+        )
+        bpf[b'net_send_policy'][ct.c_int(self.tail_call_index)] = ct.c_int(
+            fn.fd
+        )
+        fn = bpf.load_func(
+            f'net_recv_policy_{self.profile_key}'.encode('utf-8'), BPF.KPROBE
+        )
+        bpf[b'net_recv_policy'][ct.c_int(self.tail_call_index)] = ct.c_int(
+            fn.fd
+        )
         # TODO other policy types here
 
     def register_profile_struct(self, bpf):
@@ -105,23 +143,17 @@ class Policy:
             ct.c_uint64(self.profile_key)
         ] = self._generate_profile_struct()
 
-    def fs_allow(self, path: str, mode: AccessMode):
-        """
-        Add a filesystem allow rule.
-        """
-        self.fs_allow_rules.append(FSRule(path, mode))
-
-    def fs_taint(self, path: str, mode: AccessMode):
-        """
-        Add a filesystem taint rule.
-        """
-        self.fs_taint_rules.append(FSRule(path, mode))
-
     def _infer_taint_on_exec(self):
         """
         Return True if we have no taint rules, False otherwise
         """
-        return not self.fs_taint_rules  # TODO "and" with other taint rules
+        taint_rules = [
+            rule
+            for rule in self.fs_rules + self.net_rules
+            # TODO: add other taint rules
+            if rule.action == RuleAction.TAINT
+        ]
+        return not taint_rules
 
     def _generate_profile_struct(self):
         """
@@ -133,6 +165,35 @@ class Policy:
         struct.taint_on_exec = ct.c_uint8(int(self._infer_taint_on_exec()))
         return struct
 
+    def _generate_predicate(
+        self, text: str, replace: str, rules: List[Rule], _filter: Callable,
+    ) -> str:
+        """_generate_predicate.
+
+        Generate a predicate for <rules>, filtered by <filter>
+        and replace <replace> in <text> with the predicate.
+        Return new <text>.
+
+        Parameters
+        ----------
+        text : str
+            text
+        replace : str
+            replace
+        rules : List[Rule]
+            rules
+        _filter : Callable
+            _filter
+
+        Returns
+        -------
+        str
+
+        """
+        rules = filter(_filter, rules)
+        predicate = ' || '.join([r.generate() for r in rules]) or '0'
+        return text.replace(replace, predicate)
+
     def _generate_fs_policy(self):
         """
         Generate the filesystem policy and return the corresponding BPF program.
@@ -141,16 +202,85 @@ class Policy:
 
         text = text.replace('PROFILEKEY', str(self.profile_key))
 
-        allow_rules = (
-            ' || '.join([rule.generate() for rule in self.fs_allow_rules])
-            or '0'
+        # FS allow rules
+        text = self._generate_predicate(
+            text,
+            'FS_ALLOW_RULES',
+            self.fs_rules,
+            lambda r: r.action == RuleAction.ALLOW,
         )
-        text = text.replace('FS_ALLOW_RULES', allow_rules)
 
-        taint_rules = (
-            ' || '.join([rule.generate() for rule in self.fs_taint_rules])
-            or '0'
+        # FS taint rules
+        text = self._generate_predicate(
+            text,
+            'FS_TAINT_RULES',
+            self.fs_rules,
+            lambda r: r.action == RuleAction.TAINT,
         )
-        text = text.replace('FS_TAINT_RULES', taint_rules)
+
+        return text
+
+    def _generate_net_policy(self) -> None:
+        """_generate_net_policy.
+
+        Parameters
+        ----------
+
+        Returns
+        -------
+        None
+
+        """
+        text = NET_POLICY_TEMPLATE
+
+        text = text.replace('PROFILEKEY', str(self.profile_key))
+
+        text = self._generate_predicate(
+            text,
+            'BIND_TAINT_RULES',
+            self.net_rules,
+            lambda r: r.action == RuleAction.TAINT
+            and r.operation == NetOperation.BIND,
+        )
+
+        text = self._generate_predicate(
+            text,
+            'BIND_ALLOW_RULES',
+            self.net_rules,
+            lambda r: r.action == RuleAction.ALLOW
+            and r.operation == NetOperation.BIND,
+        )
+
+        text = self._generate_predicate(
+            text,
+            'SEND_TAINT_RULES',
+            self.net_rules,
+            lambda r: r.action == RuleAction.TAINT
+            and r.operation == NetOperation.SEND,
+        )
+
+        text = self._generate_predicate(
+            text,
+            'SEND_ALLOW_RULES',
+            self.net_rules,
+            lambda r: r.action == RuleAction.ALLOW
+            and r.operation == NetOperation.SEND,
+        )
+
+        text = self._generate_predicate(
+            text,
+            'RECV_TAINT_RULES',
+            self.net_rules,
+            lambda r: r.action == RuleAction.TAINT
+            and r.operation == NetOperation.RECV,
+        )
+
+        text = self._generate_predicate(
+            text,
+            'RECV_ALLOW_RULES',
+            self.net_rules,
+            lambda r: r.action == RuleAction.ALLOW
+            and r.operation == NetOperation.RECV,
+        )
 
         return text
