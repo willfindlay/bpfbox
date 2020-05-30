@@ -1,0 +1,9 @@
+clang
+-I
+.
+-I
+/usr/src/linux
+-I
+/usr/src/linux/include
+-include
+./.bcc/helpers.h
