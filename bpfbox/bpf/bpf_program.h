@@ -98,14 +98,26 @@ struct fs_enforcement_event
 struct net_enforcement_event
 {
     ENFORCEMENT_COMMON
-    u32 inode;
-    u32 parent_inode;
-    u32 st_dev;
     int category;
 };
 
 /* ========================================================================= *
  * Function Declarations                                                     *
  * ========================================================================= */
+
+/* ========================================================================= *
+ * Macros                                                                    *
+ * ========================================================================= */
+
+#define ALLOW(predicate, process) \
+if (process->tainted && predicate) { \
+    return 0; \
+}
+
+#define TAINT(predicate, process) \
+if (!process->tainted && (predicate)) { \
+    process->tainted = 1; \
+    return 0; \
+}
 
 #endif /* BPF_PROGRAM_H */

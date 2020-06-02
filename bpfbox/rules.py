@@ -100,7 +100,7 @@ class FSRule(Rule):
         self.path = path
         self.mode = mode
 
-    def generate(self):
+    def generate_predicate(self):
         st_ino, st_dev = get_inode_and_device(self.path)
         # if our path is a directory, we want to allow the directory and all of
         # its immediate children to be opened
@@ -139,5 +139,5 @@ class NetRule(Rule):
         self.port = port
         self.operation = operation
 
-    def generate(self):
+    def generate_predicate(self):
         return f''  # TODO

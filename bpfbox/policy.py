@@ -42,6 +42,15 @@ logger = get_logger()
 
 TEMPLATE_PATH = os.path.join(project_path, 'bpfbox/bpf/templates')
 
+# Keep in sync with BPF_PROG_ARRAYs in bpf/bpf_program.c
+TAIL_CALLS = [
+    'fs_policy',
+    'net_bind_policy',
+    'net_connect_policy',
+    'net_send_policy',
+    'net_recv_policy',
+]
+
 # Read template for fs_policy
 with open(os.path.join(TEMPLATE_PATH, 'fs_policy.c'), 'r') as f:
     FS_POLICY_TEMPLATE = f.read()
@@ -68,6 +77,10 @@ class Policy:
         self.profile_key = calculate_profile_key(binary)
         self.binary = binary
 
+        self._next_context_mask = count()
+
+        self.contexts = []
+
         self.fs_rules = []
         self.net_rules = []
 
@@ -81,18 +94,6 @@ class Policy:
         for line in policy_text:
             pass
             # TODO
-
-    def fs_allow(self, path: str, mode: AccessMode):
-        """
-        Add a filesystem allow rule.
-        """
-        self.fs_rules.append(FSRule(path, mode, RuleAction.ALLOW))
-
-    def fs_taint(self, path: str, mode: AccessMode):
-        """
-        Add a filesystem taint rule.
-        """
-        self.fs_rules.append(FSRule(path, mode, RuleAction.TAINT))
 
     def generate_bpf_program(self):
         """
@@ -109,35 +110,17 @@ class Policy:
         """
         Register BPF program with tail call index.
         """
-        # fs policy
-        fn = bpf.load_func(
-            f'fs_policy_{self.profile_key}'.encode('utf-8'), BPF.KPROBE
-        )
-        bpf[b'fs_policy'][ct.c_int(self.tail_call_index)] = ct.c_int(fn.fd)
-        # net bind policy
-        fn = bpf.load_func(
-            f'net_bind_policy_{self.profile_key}'.encode('utf-8'), BPF.KPROBE
-        )
-        bpf[b'net_bind_policy'][ct.c_int(self.tail_call_index)] = ct.c_int(
-            fn.fd
-        )
-        fn = bpf.load_func(
-            f'net_send_policy_{self.profile_key}'.encode('utf-8'), BPF.KPROBE
-        )
-        bpf[b'net_send_policy'][ct.c_int(self.tail_call_index)] = ct.c_int(
-            fn.fd
-        )
-        fn = bpf.load_func(
-            f'net_recv_policy_{self.profile_key}'.encode('utf-8'), BPF.KPROBE
-        )
-        bpf[b'net_recv_policy'][ct.c_int(self.tail_call_index)] = ct.c_int(
-            fn.fd
-        )
-        # TODO other policy types here
+        for name in TAIL_CALLS:
+            fn = bpf.load_func(
+                f'{name}_{self.profile_key}'.encode('utf-8'), BPF.KPROBE
+            )
+            bpf['{name}'.encode('utf-8')][
+                ct.c_int(self.tail_call_index)
+            ] = ct.c_int(fn.fd)
 
     def register_profile_struct(self, bpf):
         """
-        Generate and register profile struct with BPF program.
+        Register profile struct with BPF program.
         """
         bpf[b'profiles'][
             ct.c_uint64(self.profile_key)
