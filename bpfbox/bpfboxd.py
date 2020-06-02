@@ -126,32 +126,32 @@ class BPFBoxd(DaemonMixin):
         logger.debug(f'Using flags {" ".join(flags)}')
 
         # Generate policy and register binary names
-        logger.debug('Generating policy...')
+        logger.info('Generating policy...')
         for policy in self.policy:
             self.profile_key_to_exe[policy.profile_key] = policy.binary
             source = '\n'.join([source, policy.generate_bpf_program()])
 
         # Load the bpf program
-        logger.debug('Loading BPF program...')
+        logger.info('Loading BPF program...')
         self.bpf = BPF(text=source.encode('utf-8'), cflags=flags)
 
         # Register tail call programs and profile structs
-        logger.debug('Registering tail calls...')
+        logger.info('Registering tail calls...')
         for policy in self.policy:
             policy.register_tail_calls(self.bpf)
             policy.register_profile_struct(self.bpf)
 
         # Register exit hooks
-        logger.debug('Registering exit hooks...')
+        logger.info('Registering exit hooks...')
         atexit.register(self.cleanup)
 
         # Register perf buffers
-        logger.debug('Registering perf buffers...')
+        logger.info('Registering perf buffers...')
         self.register_perf_buffers()
 
         # Pin maps
         if not maps_pinned:
-            logger.debug('Pinnings maps...')
+            logger.info('Pinnings maps...')
             self.pin_map('on_fs_enforcement')
 
     def register_perf_buffers(self) -> None:
@@ -213,6 +213,8 @@ class BPFBoxd(DaemonMixin):
             logger.error(
                 f"Could not pin map {name}: {os.strerror(ct.get_errno())}"
             )
+        else:
+            logger.debug(f"Pinned map {name} to {fn}")
 
     def save_profiles(self) -> None:
         """save_profiles.
