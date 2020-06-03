@@ -28,12 +28,13 @@ from itertools import count
 import stat
 from textwrap import dedent
 import ctypes as ct
+from collections import defaultdict
 from typing import List, Callable
 
 from bcc import BPF
 
 from bpfbox.bpf.structs import BPFBoxProfileStruct
-from bpfbox.defs import project_path
+from bpfbox.defs import project_path, context_mask_size
 from bpfbox.utils import calculate_profile_key, get_inode_and_device
 from bpfbox.logger import get_logger
 from bpfbox.rules import Rule, FSRule, AccessMode, RuleAction, NetOperation
@@ -52,12 +53,17 @@ TAIL_CALLS = [
 ]
 
 # Read template for fs_policy
-with open(os.path.join(TEMPLATE_PATH, 'fs_policy.c'), 'r') as f:
-    FS_POLICY_TEMPLATE = f.read()
+with open(os.path.join(TEMPLATE_PATH, 'policy.c'), 'r') as f:
+    POLICY_TEMPLATE = f.read()
 
-# Read template for net_policy
-with open(os.path.join(TEMPLATE_PATH, 'net_policy.c'), 'r') as f:
-    NET_POLICY_TEMPLATE = f.read()
+
+def context_mask_counter():
+    next_mask = 1
+    while 1:
+        if next_mask > context_mask_size:
+            raise Exception('Function context limit reached')
+        yield next_mask
+        next_mask = next_mask << 1
 
 
 class Policy:
@@ -77,12 +83,11 @@ class Policy:
         self.profile_key = calculate_profile_key(binary)
         self.binary = binary
 
-        self._next_context_mask = count()
+        self.should_taint_on_exec = 0
+
+        self._next_context_mask = context_mask_counter()
 
         self.contexts = []
-
-        self.fs_rules = []
-        self.net_rules = []
 
     @classmethod
     def from_policy_file(path):
@@ -95,48 +100,80 @@ class Policy:
             pass
             # TODO
 
+    def add_rule_context(
+        self, addr: int = None, sym: bytes = b''
+    ) -> 'RuleContext':
+        from bpfbox.context import RuleContext
+
+        if addr or sym:
+            context_mask = next(self._next_context_mask)
+        else:
+            context_mask = None
+
+        rc = RuleContext(
+            self.binary, context_mask=context_mask, addr=addr, sym=sym,
+        )
+        self.contexts.append(rc)
+        return rc
+
     def generate_bpf_program(self):
         """
         Generate the BPF programs based on the policy.
         """
-        fs_policy = self._generate_fs_policy()
-        logger.debug(fs_policy)
-        net_policy = self._generate_net_policy()
-        logger.debug(net_policy)
-        # TODO generate other policy types here
-        return dedent('\n'.join([fs_policy, net_policy]))
+        policy = POLICY_TEMPLATE
+        # Set profile key
+        policy = policy.replace('PROFILEKEY', str(self.profile_key))
+        # Generate uprobes for contexts and rules for contexts
+        rules_agg = defaultdict(list)
+        uprobes = []
+        for c in self.contexts:
+            uprobes.append(c.generate_uprobes())
+            for k, v in c.generate_rules().items():
+                rules_agg[k].append(v)
+        for k, v in rules_agg.items():
+            policy = policy.replace(k, '\n'.join(v))
+        policy = '\n'.join([policy] + uprobes)
+        # Set whether we should taint on exec
+        if 'TAINT' not in policy:
+            self.should_taint_on_exec = 1
+        logger.debug(policy)
+        return policy
 
-    def register_tail_calls(self, bpf):
+    def post_generation_hooks(self, bpf):
+        """
+        Hooks to be run once the BPF programs are loaded.
+        """
+        self._register_tail_calls(bpf)
+        self._register_profile_struct(bpf)
+        self._attach_uprobes(bpf)
+
+    def _attach_uprobes(self, bpf):
+        """
+        Attach uprobes for contexts.
+        """
+        for c in self.contexts:
+            c.attach_uprobes(bpf)
+
+    def _register_tail_calls(self, bpf):
         """
         Register BPF program with tail call index.
         """
         for name in TAIL_CALLS:
+            logger.debug(f'attempting to regsiter {name}')
             fn = bpf.load_func(
                 f'{name}_{self.profile_key}'.encode('utf-8'), BPF.KPROBE
             )
-            bpf['{name}'.encode('utf-8')][
+            bpf[name.encode('utf-8')][
                 ct.c_int(self.tail_call_index)
             ] = ct.c_int(fn.fd)
 
-    def register_profile_struct(self, bpf):
+    def _register_profile_struct(self, bpf):
         """
         Register profile struct with BPF program.
         """
         bpf[b'profiles'][
             ct.c_uint64(self.profile_key)
         ] = self._generate_profile_struct()
-
-    def _infer_taint_on_exec(self):
-        """
-        Return True if we have no taint rules, False otherwise
-        """
-        taint_rules = [
-            rule
-            for rule in self.fs_rules + self.net_rules
-            # TODO: add other taint rules
-            if rule.action == RuleAction.TAINT
-        ]
-        return not taint_rules
 
     def _generate_profile_struct(self):
         """
@@ -145,167 +182,5 @@ class Policy:
         """
         struct = BPFBoxProfileStruct()
         struct.tail_call_index = self.tail_call_index
-        struct.taint_on_exec = ct.c_uint8(int(self._infer_taint_on_exec()))
+        struct.taint_on_exec = ct.c_uint8(int(self.should_taint_on_exec))
         return struct
-
-    def _generate_predicate(
-        self, text: str, replace: str, rules: List[Rule], _filter: Callable,
-    ) -> str:
-        """_generate_predicate.
-
-        Generate a predicate for <rules>, filtered by <filter>
-        and replace <replace> in <text> with the predicate.
-        Return new <text>.
-
-        Parameters
-        ----------
-        text : str
-            text
-        replace : str
-            replace
-        rules : List[Rule]
-            rules
-        _filter : Callable
-            _filter
-
-        Returns
-        -------
-        str
-
-        """
-        rules = filter(_filter, rules)
-        predicate = ' || '.join([r.generate() for r in rules]) or '0'
-        return text.replace(replace, predicate)
-
-    def _generate_fs_policy(self):
-        """
-        Generate the filesystem policy and return the corresponding BPF program.
-        """
-        text = FS_POLICY_TEMPLATE
-
-        text = text.replace('PROFILEKEY', str(self.profile_key))
-
-        # FS allow rules
-        text = self._generate_predicate(
-            text,
-            'FS_ALLOW_RULES',
-            self.fs_rules,
-            lambda r: r.action == RuleAction.ALLOW,
-        )
-
-        # FS taint rules
-        text = self._generate_predicate(
-            text,
-            'FS_TAINT_RULES',
-            self.fs_rules,
-            lambda r: r.action == RuleAction.TAINT,
-        )
-
-        return text
-
-    def _generate_net_policy(self) -> None:
-        """_generate_net_policy.
-
-        Parameters
-        ----------
-
-        Returns
-        -------
-        None
-
-        """
-        text = NET_POLICY_TEMPLATE
-
-        text = text.replace('PROFILEKEY', str(self.profile_key))
-
-        # Bind rules -------------------------------------------
-
-        text = self._generate_predicate(
-            text,
-            'BIND_TAINT_RULES',
-            self.net_rules,
-            lambda r: r.action == RuleAction.TAINT
-            and r.operation == NetOperation.BIND,
-        )
-
-        text = self._generate_predicate(
-            text,
-            'BIND_ALLOW_RULES',
-            self.net_rules,
-            lambda r: r.action == RuleAction.ALLOW
-            and r.operation == NetOperation.BIND,
-        )
-
-        # Connect rules ----------------------------------------
-
-        text = self._generate_predicate(
-            text,
-            'CONNECT_TAINT_RULES',
-            self.net_rules,
-            lambda r: r.action == RuleAction.TAINT
-            and r.operation == NetOperation.CONNECT,
-        )
-
-        text = self._generate_predicate(
-            text,
-            'CONNECT_ALLOW_RULES',
-            self.net_rules,
-            lambda r: r.action == RuleAction.ALLOW
-            and r.operation == NetOperation.CONNECT,
-        )
-
-        # Accept rules -----------------------------------------
-
-        text = self._generate_predicate(
-            text,
-            'ACCEPT_TAINT_RULES',
-            self.net_rules,
-            lambda r: r.action == RuleAction.TAINT
-            and r.operation == NetOperation.ACCEPT,
-        )
-
-        text = self._generate_predicate(
-            text,
-            'ACCEPT_ALLOW_RULES',
-            self.net_rules,
-            lambda r: r.action == RuleAction.ALLOW
-            and r.operation == NetOperation.ACCEPT,
-        )
-
-        # Send rules -------------------------------------------
-
-        text = self._generate_predicate(
-            text,
-            'SEND_TAINT_RULES',
-            self.net_rules,
-            lambda r: r.action == RuleAction.TAINT
-            and r.operation == NetOperation.SEND,
-        )
-
-        text = self._generate_predicate(
-            text,
-            'SEND_ALLOW_RULES',
-            self.net_rules,
-            lambda r: r.action == RuleAction.ALLOW
-            and r.operation == NetOperation.SEND,
-        )
-
-        # Recv rules -------------------------------------------
-
-        text = self._generate_predicate(
-            text,
-            'RECV_TAINT_RULES',
-            self.net_rules,
-            lambda r: r.action == RuleAction.TAINT
-            and r.operation == NetOperation.RECV,
-        )
-
-        text = self._generate_predicate(
-            text,
-            'RECV_ALLOW_RULES',
-            self.net_rules,
-            lambda r: r.action == RuleAction.ALLOW
-            and r.operation == NetOperation.RECV,
-        )
-
-        return text

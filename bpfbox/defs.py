@@ -45,6 +45,9 @@ logfile = '/var/log/bpfbox/bpfbox.log'
 # Path to bpffs
 bpffs = '/sys/fs/bpf'
 
+# Size (in bits) of context masks for policy
+context_mask_size = 64
+
 
 def init(args):
     """

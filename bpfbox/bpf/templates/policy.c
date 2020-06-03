@@ -52,27 +52,101 @@ int fs_policy_PROFILEKEY(struct pt_regs *ctx) {
      * revisited before release. TODO: discuss with Anil */
     if (!inode && !parent_inode && !st_dev) return 0;
 
-#ifdef BPFBOX_DEBUG
-    bpf_trace_printk("opening with mode %d inode %u std_dev %u\n", acc_mode,
-                     inode, st_dev);
-#endif
+    FS_RULES
 
-    // Apply taint rules if not tainted
-    if (!process->tainted) {
-        if (FS_TAINT_RULES) {
-            process->tainted = 1;
-            return 0;
-        }
-    }
-
-    // Enforce policy if tainted
-    if (process->tainted) {
-        if (!(FS_ALLOW_RULES)) {
+    if (process->tainted)
             fs_enforce(ctx, process, profile, inode, parent_inode, st_dev,
                        acc_mode);
-            return 0;
-        }
-    }
+
+    return 0;
+}
+
+/* net_policy templates */
+
+int net_bind_policy_PROFILEKEY(struct pt_regs *ctx)
+{
+    // Lookup process
+    u32 pid = bpf_get_current_pid_tgid();
+    struct bpfbox_process *process = processes.lookup(&pid);
+    if (!process)
+        return 0;
+
+    // Look up profile
+    struct bpfbox_profile *profile = profiles.lookup(&process->profile_key);
+    if (!profile)
+        return 0;
+
+    BIND_RULES
+
+    if (process->tainted)
+        net_enforce(ctx, process, profile, BPFBOX_BIND);
+
+    return 0;
+}
+
+int net_connect_policy_PROFILEKEY(struct pt_regs *ctx)
+{
+    // Lookup process
+    u32 pid = bpf_get_current_pid_tgid();
+    struct bpfbox_process *process = processes.lookup(&pid);
+    if (!process)
+        return 0;
+
+    // Look up profile
+    struct bpfbox_profile *profile = profiles.lookup(&process->profile_key);
+    if (!profile)
+        return 0;
+
+    CONNECT_RULES
+
+    if (process->tainted)
+        net_enforce(ctx, process, profile, BPFBOX_CONNECT);
+
+    return 0;
+}
+
+int net_send_policy_PROFILEKEY(struct pt_regs *ctx)
+{
+    // Lookup process
+    u32 pid = bpf_get_current_pid_tgid();
+    struct bpfbox_process *process = processes.lookup(&pid);
+    if (!process)
+        return 0;
+
+    // Look up profile
+    struct bpfbox_profile *profile = profiles.lookup(&process->profile_key);
+    if (!profile)
+        return 0;
+
+    int syscall = PT_REGS_PARM1(ctx);
+
+    SEND_RULES
+
+    if (process->tainted)
+        net_enforce(ctx, process, profile, BPFBOX_SEND);
+
+    return 0;
+}
+
+int net_recv_policy_PROFILEKEY(struct pt_regs *ctx)
+{
+    // Lookup process
+    u32 pid = bpf_get_current_pid_tgid();
+    struct bpfbox_process *process = processes.lookup(&pid);
+    if (!process)
+        return 0;
+
+    // Look up profile
+    struct bpfbox_profile *profile = profiles.lookup(&process->profile_key);
+    if (!profile)
+        return 0;
+
+    int syscall = PT_REGS_PARM1(ctx);
+
+    RECV_RULES
+
+    if (process->tainted)
+        net_enforce(ctx, process, profile, BPFBOX_RECV);
 
     return 0;
 }

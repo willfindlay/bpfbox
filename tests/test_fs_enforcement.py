@@ -21,10 +21,10 @@ POLICY = BPFBoxLoggerClass.POLICY
 @pytest.fixture()
 def bpfboxd(caplog):
     # Set log level
-    caplog.set_level(POLICY, 'ebpH')
+    caplog.set_level(logging.DEBUG, 'ebpH')
 
     # Load BPF program
-    args = parse_args('--nodaemon'.split())
+    args = parse_args('--nodaemon --debug'.split())
     defs.init(args)
     b = BPFBoxd(args)
 
@@ -46,7 +46,7 @@ def test_fs_implicit_taint(bpfboxd: BPFBoxd, caplog):
 
 def test_fs_taint(bpfboxd: BPFBoxd, caplog):
     p = Policy(OPENPATH)
-    p.fs_taint('/tmp/bpfbox/a', AccessMode.MAY_READ)
+    p.add_rule_context().fs_taint('/tmp/bpfbox/a', AccessMode.MAY_READ)
     bpfboxd.policy.append(p)
     bpfboxd.load_bpf()
 
@@ -67,8 +67,9 @@ def test_fs_taint(bpfboxd: BPFBoxd, caplog):
 
 def test_allow_read(bpfboxd: BPFBoxd, caplog):
     p = Policy(OPENPATH)
-    p.fs_taint('/tmp/bpfbox/a', AccessMode.MAY_READ)
-    p.fs_allow('/tmp/bpfbox/a', AccessMode.MAY_READ)
+    p.add_rule_context().fs_taint(
+        '/tmp/bpfbox/a', AccessMode.MAY_READ
+    ).fs_allow('/tmp/bpfbox/a', AccessMode.MAY_READ)
     bpfboxd.policy.append(p)
     bpfboxd.load_bpf()
 
@@ -89,9 +90,11 @@ def test_allow_read(bpfboxd: BPFBoxd, caplog):
 
 def test_allow_write(bpfboxd: BPFBoxd, caplog):
     p = Policy(OPENPATH)
-    p.fs_taint('/tmp/bpfbox/a', AccessMode.MAY_READ)
-    p.fs_allow('/tmp/bpfbox/a', AccessMode.MAY_READ)
-    p.fs_allow('/tmp/bpfbox/b', AccessMode.MAY_WRITE)
+    p.add_rule_context().fs_taint(
+        '/tmp/bpfbox/a', AccessMode.MAY_READ
+    ).fs_allow('/tmp/bpfbox/a', AccessMode.MAY_READ).fs_allow(
+        '/tmp/bpfbox/b', AccessMode.MAY_WRITE
+    )
     bpfboxd.policy.append(p)
     bpfboxd.load_bpf()
 
@@ -112,10 +115,13 @@ def test_allow_write(bpfboxd: BPFBoxd, caplog):
 
 def test_rw_when_rdonly_allowed(bpfboxd: BPFBoxd, caplog):
     p = Policy(OPENPATH)
-    p.fs_taint('/tmp/bpfbox/a', AccessMode.MAY_READ)
-    p.fs_allow('/tmp/bpfbox/a', AccessMode.MAY_READ)
-    p.fs_allow('/tmp/bpfbox/b', AccessMode.MAY_WRITE)
-    p.fs_allow('/tmp/bpfbox/c', AccessMode.MAY_READ)
+    p.add_rule_context().fs_taint(
+        '/tmp/bpfbox/a', AccessMode.MAY_READ
+    ).fs_allow('/tmp/bpfbox/a', AccessMode.MAY_READ).fs_allow(
+        '/tmp/bpfbox/b', AccessMode.MAY_WRITE
+    ).fs_allow(
+        '/tmp/bpfbox/c', AccessMode.MAY_READ
+    )
     bpfboxd.policy.append(p)
     bpfboxd.load_bpf()
 
@@ -136,10 +142,13 @@ def test_rw_when_rdonly_allowed(bpfboxd: BPFBoxd, caplog):
 
 def test_rw_when_wronly_allowed(bpfboxd: BPFBoxd, caplog):
     p = Policy(OPENPATH)
-    p.fs_taint('/tmp/bpfbox/a', AccessMode.MAY_READ)
-    p.fs_allow('/tmp/bpfbox/a', AccessMode.MAY_READ)
-    p.fs_allow('/tmp/bpfbox/b', AccessMode.MAY_WRITE)
-    p.fs_allow('/tmp/bpfbox/c', AccessMode.MAY_WRITE)
+    p.add_rule_context().fs_taint(
+        '/tmp/bpfbox/a', AccessMode.MAY_READ
+    ).fs_allow('/tmp/bpfbox/a', AccessMode.MAY_READ).fs_allow(
+        '/tmp/bpfbox/b', AccessMode.MAY_WRITE
+    ).fs_allow(
+        '/tmp/bpfbox/c', AccessMode.MAY_WRITE
+    )
     bpfboxd.policy.append(p)
     bpfboxd.load_bpf()
 
@@ -160,10 +169,13 @@ def test_rw_when_wronly_allowed(bpfboxd: BPFBoxd, caplog):
 
 def test_allow_rw(bpfboxd: BPFBoxd, caplog):
     p = Policy(OPENPATH)
-    p.fs_taint('/tmp/bpfbox/a', AccessMode.MAY_READ)
-    p.fs_allow('/tmp/bpfbox/a', AccessMode.MAY_READ)
-    p.fs_allow('/tmp/bpfbox/b', AccessMode.MAY_WRITE)
-    p.fs_allow('/tmp/bpfbox/c', AccessMode.MAY_READ | AccessMode.MAY_WRITE)
+    p.add_rule_context().fs_taint(
+        '/tmp/bpfbox/a', AccessMode.MAY_READ
+    ).fs_allow('/tmp/bpfbox/a', AccessMode.MAY_READ).fs_allow(
+        '/tmp/bpfbox/b', AccessMode.MAY_WRITE
+    ).fs_allow(
+        '/tmp/bpfbox/c', AccessMode.MAY_READ | AccessMode.MAY_WRITE
+    )
     bpfboxd.policy.append(p)
     bpfboxd.load_bpf()
 
@@ -184,11 +196,15 @@ def test_allow_rw(bpfboxd: BPFBoxd, caplog):
 
 def test_allow_append(bpfboxd: BPFBoxd, caplog):
     p = Policy(OPENPATH)
-    p.fs_taint('/tmp/bpfbox/a', AccessMode.MAY_READ)
-    p.fs_allow('/tmp/bpfbox/a', AccessMode.MAY_READ)
-    p.fs_allow('/tmp/bpfbox/b', AccessMode.MAY_WRITE)
-    p.fs_allow('/tmp/bpfbox/c', AccessMode.MAY_READ | AccessMode.MAY_WRITE)
-    p.fs_allow('/tmp/bpfbox/a', AccessMode.MAY_WRITE | AccessMode.MAY_APPEND)
+    p.add_rule_context().fs_taint(
+        '/tmp/bpfbox/a', AccessMode.MAY_READ
+    ).fs_allow('/tmp/bpfbox/a', AccessMode.MAY_READ).fs_allow(
+        '/tmp/bpfbox/b', AccessMode.MAY_WRITE
+    ).fs_allow(
+        '/tmp/bpfbox/c', AccessMode.MAY_READ | AccessMode.MAY_WRITE
+    ).fs_allow(
+        '/tmp/bpfbox/a', AccessMode.MAY_WRITE | AccessMode.MAY_APPEND
+    )
     bpfboxd.policy.append(p)
     bpfboxd.load_bpf()
 
@@ -209,12 +225,17 @@ def test_allow_append(bpfboxd: BPFBoxd, caplog):
 
 def test_allow_exec(bpfboxd: BPFBoxd, caplog):
     p = Policy(OPENPATH)
-    p.fs_taint('/tmp/bpfbox/a', AccessMode.MAY_READ)
-    p.fs_allow('/tmp/bpfbox/a', AccessMode.MAY_READ)
-    p.fs_allow('/tmp/bpfbox/b', AccessMode.MAY_WRITE)
-    p.fs_allow('/tmp/bpfbox/c', AccessMode.MAY_READ | AccessMode.MAY_WRITE)
-    p.fs_allow('/tmp/bpfbox/a', AccessMode.MAY_WRITE | AccessMode.MAY_APPEND)
-    p.fs_allow('/tmp/bpfbox/d', AccessMode.MAY_READ | AccessMode.MAY_EXEC)
+    p.add_rule_context().fs_taint(
+        '/tmp/bpfbox/a', AccessMode.MAY_READ
+    ).fs_allow('/tmp/bpfbox/a', AccessMode.MAY_READ).fs_allow(
+        '/tmp/bpfbox/b', AccessMode.MAY_WRITE
+    ).fs_allow(
+        '/tmp/bpfbox/c', AccessMode.MAY_READ | AccessMode.MAY_WRITE
+    ).fs_allow(
+        '/tmp/bpfbox/a', AccessMode.MAY_WRITE | AccessMode.MAY_APPEND
+    ).fs_allow(
+        '/tmp/bpfbox/d', AccessMode.MAY_READ | AccessMode.MAY_EXEC
+    )
     bpfboxd.policy.append(p)
     bpfboxd.load_bpf()
 
@@ -226,8 +247,9 @@ def test_allow_exec(bpfboxd: BPFBoxd, caplog):
 
 def test_extra_access_modes(bpfboxd: BPFBoxd, caplog):
     p = Policy(OPENPATH)
-    p.fs_taint('/tmp/bpfbox/a', AccessMode.MAY_READ)
-    p.fs_allow(
+    p.add_rule_context().fs_taint(
+        '/tmp/bpfbox/a', AccessMode.MAY_READ
+    ).fs_allow(
         '/tmp/bpfbox/a',
         AccessMode.MAY_READ
         | AccessMode.MAY_WRITE

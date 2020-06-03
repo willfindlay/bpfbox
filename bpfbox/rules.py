@@ -80,7 +80,7 @@ class Rule:
         self.action = action
 
     @abstractmethod
-    def generate(self):
+    def generate(self, context_mask=None):
         pass
 
 
@@ -100,11 +100,13 @@ class FSRule(Rule):
         self.path = path
         self.mode = mode
 
-    def generate_predicate(self):
+    def generate(self, context_mask: int = None):
+        assert not context_mask or isinstance(context_mask, int)
         st_ino, st_dev = get_inode_and_device(self.path)
         # if our path is a directory, we want to allow the directory and all of
         # its immediate children to be opened
         # TODO: maybe change this behavior to allow more control
+        # File predicate
         if os.path.isdir(self.path):
             file_predicate = (
                 f'((inode == {st_ino} || parent_inode == {st_ino})'
@@ -112,8 +114,16 @@ class FSRule(Rule):
             )
         else:
             file_predicate = f'(inode == {st_ino} && st_dev == {st_dev})'
+        # Access predicate
         access_predicate = f'((acc_mode & {self.mode}) == acc_mode)'
-        return f'({file_predicate} && {access_predicate})'
+        # Context predicate
+        context_predicate = (
+            f'(process->context_mask & {context_mask})'
+            if context_mask
+            else '1'
+        )
+        action = 'ALLOW' if self.action == RuleAction.ALLOW else 'TAINT'
+        return f'{action}({file_predicate} && {access_predicate} && {context_predicate}, process);'
 
 
 class NetRule(Rule):
@@ -139,5 +149,5 @@ class NetRule(Rule):
         self.port = port
         self.operation = operation
 
-    def generate_predicate(self):
+    def generate(self, context_mask=None):
         return f''  # TODO

@@ -14,4 +14,10 @@
 #define BPFBOX_ACCEPT 0x04
 #define BPFBOX_SEND 0x08
 #define BPFBOX_RECV 0x10
+
+#define FS_RULES
+#define BIND_RULES
+#define CONNECT_RULES
+#define SEND_RULES
+#define RECV_RULES
 #endif /* DEFS_H */

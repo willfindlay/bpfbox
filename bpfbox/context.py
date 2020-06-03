@@ -11,15 +11,6 @@ from bpfbox.utils import calculate_profile_key
 
 TEMPLATE_PATH = os.path.join(project_path, 'bpfbox/bpf/templates')
 
-# Keep in sync with BPF_PROG_ARRAYs in bpf/bpf_program.c
-TAIL_CALLS = [
-    'fs_policy',
-    'net_bind_policy',
-    'net_connect_policy',
-    'net_send_policy',
-    'net_recv_policy',
-]
-
 # Read template for uprobes
 with open(os.path.join(TEMPLATE_PATH, 'uprobes.c'), 'r') as f:
     UPROBES_TEMPLATE = f.read()
@@ -55,25 +46,21 @@ class RuleContext:
         self.fs_rules = []
         self.net_rules = []
 
-    def fs_allow(self, path: str, mode: AccessMode):
+    def fs_allow(self, path: str, mode: AccessMode) -> 'RuleContext':
         """
         Add a filesystem allow rule.
         """
         self.fs_rules.append(FSRule(path, mode, RuleAction.ALLOW))
+        return self
 
-    def fs_taint(self, path: str, mode: AccessMode):
+    def fs_taint(self, path: str, mode: AccessMode) -> 'RuleContext':
         """
         Add a filesystem taint rule.
         """
         self.fs_rules.append(FSRule(path, mode, RuleAction.TAINT))
+        return self
 
-    def _generate_bpf_programs(self) -> str:
-        pass
-
-    def _attach_bpf_programs(self, bpf: BPF) -> None:
-        pass
-
-    def _generate_uprobes(self) -> str:
+    def generate_uprobes(self) -> str:
         if not self.addr and not self.sym:
             return ''
 
@@ -81,7 +68,7 @@ class RuleContext:
         text = text.replace('CONTEXTMASK', str(self.context_mask))
         text = text.replace('PROFILEKEY', str(self.profile_key))
 
-    def _attach_uprobes(self, bpf: BPF) -> None:
+    def attach_uprobes(self, bpf: BPF) -> None:
         if not self.addr and not self.sym:
             return
 
@@ -95,21 +82,34 @@ class RuleContext:
             name=self.binary, sym=self.sym, addr=self.addr, fn_name=uretprobe,
         )
 
-    def _generate_rules(self) -> dict:
+    def generate_rules(self) -> dict:
         return {
-            'fs_rules': self._generate_fs_rules(),
-            'net_rules': self._generate_net_rules(),
+            'FS_RULES': self._generate_fs_rules(),
+            'BIND_RULES': self._generate_net_bind_rules(),
+            'CONNECT_RULES': self._generate_net_connect_rules(),
+            'SEND_RULES': self._generate_net_send_rules(),
+            'RECV_RULES': self._generate_net_recv_rules(),
         }
 
     def _generate_fs_rules(self) -> str:
-        predicates = (
-            ' || '.join([r.generate_predicate() for r in self.fs_rules]) or '0'
-        )
-        # TODO
+        return '\n'.join([r.generate() for r in self.fs_rules])
 
-    def _generate_net_rules(self) -> str:
-        predicates = (
-            ' || '.join([r.generate_predicate() for r in self.net_rules])
-            or '0'
-        )
+    def _generate_net_bind_rules(self) -> str:
+        pass
         # TODO
+        return ''
+
+    def _generate_net_connect_rules(self) -> str:
+        pass
+        # TODO
+        return ''
+
+    def _generate_net_send_rules(self) -> str:
+        pass
+        # TODO
+        return ''
+
+    def _generate_net_recv_rules(self) -> str:
+        pass
+        # TODO
+        return ''

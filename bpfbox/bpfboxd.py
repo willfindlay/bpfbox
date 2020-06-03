@@ -133,13 +133,13 @@ class BPFBoxd(DaemonMixin):
 
         # Load the bpf program
         logger.info('Loading BPF program...')
+        logger.debug(source)
         self.bpf = BPF(text=source.encode('utf-8'), cflags=flags)
 
         # Register tail call programs and profile structs
-        logger.info('Registering tail calls...')
+        logger.info('Running post generation hooks...')
         for policy in self.policy:
-            policy.register_tail_calls(self.bpf)
-            policy.register_profile_struct(self.bpf)
+            policy.post_generation_hooks(self.bpf)
 
         # Register exit hooks
         logger.info('Registering exit hooks...')
