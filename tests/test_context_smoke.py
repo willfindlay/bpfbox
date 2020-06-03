@@ -87,3 +87,22 @@ def test_context_allow_wrong_context_smoke(bpfboxd: BPFBoxd, caplog):
     rc = subprocess.Popen(CONTEXT_SMOKE_PATH).wait()
 
     assert rc == -9
+
+
+def test_context_allow_some_context_smoke(bpfboxd: BPFBoxd, caplog):
+    p = Policy(CONTEXT_SMOKE_PATH)
+    p.add_rule_context(sym='main').fs_taint(
+        '/tmp/bpfbox/a', AccessMode.MAY_READ
+    )
+    p.add_rule_context(sym='testificate_a').fs_allow(
+        '/tmp/bpfbox/a', AccessMode.MAY_READ
+    )
+    p.add_rule_context(sym='testificate_b').fs_allow(
+        '/tmp/bpfbox/b', AccessMode.MAY_READ
+    )
+    bpfboxd.policy.append(p)
+    bpfboxd.load_bpf()
+
+    rc = subprocess.Popen(CONTEXT_SMOKE_PATH).wait()
+
+    assert rc == -9

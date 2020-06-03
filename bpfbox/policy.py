@@ -43,15 +43,6 @@ logger = get_logger()
 
 TEMPLATE_PATH = os.path.join(project_path, 'bpfbox/bpf/templates')
 
-# Keep in sync with BPF_PROG_ARRAYs in bpf/bpf_program.c
-TAIL_CALLS = [
-    'fs_policy',
-    'net_bind_policy',
-    'net_connect_policy',
-    'net_send_policy',
-    'net_recv_policy',
-]
-
 # Read template for fs_policy
 with open(os.path.join(TEMPLATE_PATH, 'policy.c'), 'r') as f:
     POLICY_TEMPLATE = f.read()
@@ -157,7 +148,16 @@ class Policy:
         """
         Register BPF program with tail call index.
         """
-        for name in TAIL_CALLS:
+        # Keep in sync with BPF_PROG_ARRAYs in bpf/bpf_program.c
+        tail_calls = [
+            'fs_policy',
+            'net_bind_policy',
+            'net_connect_policy',
+            'net_send_policy',
+            'net_recv_policy',
+        ]
+
+        for name in tail_calls:
             logger.debug(f'attempting to regsiter {name}')
             fn = bpf.load_func(
                 f'{name}_{self.profile_key}'.encode('utf-8'), BPF.KPROBE

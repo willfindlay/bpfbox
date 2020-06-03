@@ -21,10 +21,10 @@ POLICY = BPFBoxLoggerClass.POLICY
 @pytest.fixture()
 def bpfboxd(caplog):
     # Set log level
-    caplog.set_level(logging.DEBUG, 'ebpH')
+    caplog.set_level(POLICY, 'ebpH')
 
     # Load BPF program
-    args = parse_args('--nodaemon --debug'.split())
+    args = parse_args('--nodaemon'.split())
     defs.init(args)
     b = BPFBoxd(args)
 
