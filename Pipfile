@@ -7,10 +7,12 @@ verify_ssl = true
 jedi = "*"
 pylint = "*"
 pytest = "*"
+doq = "*"
 
 [packages]
 python-daemon = "~=2.2.4"
 bpfbox = {editable = true, path = "."}
+netaddr = "*"
 
 [requires]
 python_version = "3.8"

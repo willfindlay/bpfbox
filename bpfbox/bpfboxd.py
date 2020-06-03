@@ -1,3 +1,27 @@
+"""
+    🐝 BPFBox 📦  Application-transparent sandboxing rules with eBPF.
+    Copyright (C) 2020  William Findlay
+
+    This program is free software: you can redistribute it and/or modify
+    it under the terms of the GNU General Public License as published by
+    the Free Software Foundation, either version 3 of the License, or
+    (at your option) any later version.
+
+    This program is distributed in the hope that it will be useful,
+    but WITHOUT ANY WARRANTY; without even the implied warranty of
+    MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+    GNU General Public License for more details.
+
+    You should have received a copy of the GNU General Public License
+    along with this program.  If not, see <https://www.gnu.org/licenses/>.
+
+    William Findlay created this.
+        williamfindlay <àŧ> cmail.carleton.ca
+
+    This file provides the implementation of the bpfboxd daemon and defines
+    its entrypoint.
+"""
+
 import os
 import sys
 import atexit
@@ -5,6 +29,7 @@ import signal
 import time
 import ctypes as ct
 from collections import defaultdict
+from typing import List, NoReturn
 
 from bcc import BPF
 from bcc.libbcc import lib
@@ -25,12 +50,13 @@ signal.signal(signal.SIGINT, lambda x, y: sys.exit(0))
 
 
 class BPFBoxd(DaemonMixin):
-    """
+    """BPFBoxd.
+
     BPFBox's daemon class.
     Manages BPF programs and reads events in an event loop.
     """
 
-    def __init__(self, args):
+    def __init__(self, args: List[str]):
         self.bpf = None
         self.debug = args.debug
         self.ticksleep = defs.ticksleep
@@ -41,7 +67,19 @@ class BPFBoxd(DaemonMixin):
         # programs TODO: maybe use a generator instead
         self.policy = []
 
-    def reload_bpf(self):
+    def reload_bpf(self) -> None:
+        """reload_bpf.
+
+        Reload the BPF program, performing any necessary cleanup.
+
+        Parameters
+        ----------
+
+        Returns
+        -------
+        None
+
+        """
         try:
             self.cleanup()
         except AttributeError:
@@ -49,9 +87,20 @@ class BPFBoxd(DaemonMixin):
         self.bpf = None
         self.load_bpf(maps_pinned=True)
 
-    def load_bpf(self, maps_pinned=False):
-        """
+    def load_bpf(self, maps_pinned: bool = False) -> None:
+        """load_bpf.
+
         Initialize BPF program.
+
+        Parameters
+        ----------
+        maps_pinned : bool
+            maps_pinned
+
+        Returns
+        -------
+        None
+
         """
         assert self.bpf is None
 
@@ -77,37 +126,46 @@ class BPFBoxd(DaemonMixin):
         logger.debug(f'Using flags {" ".join(flags)}')
 
         # Generate policy and register binary names
-        logger.debug('Generating policy...')
+        logger.info('Generating policy...')
         for policy in self.policy:
             self.profile_key_to_exe[policy.profile_key] = policy.binary
             source = '\n'.join([source, policy.generate_bpf_program()])
 
         # Load the bpf program
-        logger.debug('Loading BPF program...')
+        logger.info('Loading BPF program...')
+        logger.debug(source)
         self.bpf = BPF(text=source.encode('utf-8'), cflags=flags)
 
         # Register tail call programs and profile structs
-        logger.debug('Registering tail calls...')
+        logger.info('Running post generation hooks...')
         for policy in self.policy:
-            policy.register_tail_calls(self.bpf)
-            policy.register_profile_struct(self.bpf)
+            policy.post_generation_hooks(self.bpf)
 
         # Register exit hooks
-        logger.debug('Registering exit hooks...')
+        logger.info('Registering exit hooks...')
         atexit.register(self.cleanup)
 
         # Register perf buffers
-        logger.debug('Registering perf buffers...')
+        logger.info('Registering perf buffers...')
         self.register_perf_buffers()
 
         # Pin maps
         if not maps_pinned:
-            logger.debug('Pinnings maps...')
+            logger.info('Pinnings maps...')
             self.pin_map('on_fs_enforcement')
 
-    def register_perf_buffers(self):
-        """
-        Define and register perf buffers.
+    def register_perf_buffers(self) -> None:
+        """register_perf_buffers.
+
+        Define and register perf buffers with BPF program.
+
+        Parameters
+        ----------
+
+        Returns
+        -------
+        None
+
         """
 
         def on_fs_enforcement(cpu, data, size):
@@ -125,9 +183,21 @@ class BPFBoxd(DaemonMixin):
 
         self.bpf[b'on_fs_enforcement'].open_perf_buffer(on_fs_enforcement)
 
-    def pin_map(self, name):
-        """
-        Pin a map to sysfs so that they can be accessed in subsequent runs.
+    def pin_map(self, name: str) -> None:
+        """pin_map.
+
+        Pin a map <name> to /sys/bpf/<name> so that it can be accessed
+        in subsequent runs.
+
+        Parameters
+        ----------
+        name : str
+            name
+
+        Returns
+        -------
+        None
+
         """
         fn = os.path.join(defs.bpffs, name)
 
@@ -143,34 +213,85 @@ class BPFBoxd(DaemonMixin):
             logger.error(
                 f"Could not pin map {name}: {os.strerror(ct.get_errno())}"
             )
+        else:
+            logger.debug(f"Pinned map {name} to {fn}")
 
-    def save_profiles(self):
-        """
+    def save_profiles(self) -> None:
+        """save_profiles.
+
         Write all profile data to disk.
-        """
-        # TODO
+        TODO: implement this
 
-    def save_profile(self):
+        Parameters
+        ----------
+
+        Returns
+        -------
+        None
+
         """
+        pass
+
+    def save_profile(self) -> None:
+        """save_profile.
+
         Save one profile's data to disk.
-        """
-        # TODO
+        TODO: implement this
 
-    def load_profiles(self):
+        Parameters
+        ----------
+
+        Returns
+        -------
+        None
+
         """
+        pass
+
+    def load_profiles(self) -> None:
+        """load_profiles.
+
         Load all profile data from disk.
-        """
-        # TODO
+        TODO: implement this
 
-    def load_profile(self):
+        Parameters
+        ----------
+
+        Returns
+        -------
+        None
+
         """
+        pass
+
+    def load_profile(self) -> None:
+        """load_profile.
+
         Load one profile's data from disk.
-        """
-        # TODO
+        TODO: implement this
 
-    def dump_debug_data(self):
+        Parameters
+        ----------
+
+        Returns
+        -------
+        None
+
         """
+        pass
+
+    def dump_debug_data(self) -> None:
+        """dump_debug_data.
+
         Dump debugging data to logs if we are running in debug mode.
+
+        Parameters
+        ----------
+
+        Returns
+        -------
+        None
+
         """
         import logging
 
@@ -187,9 +308,18 @@ class BPFBoxd(DaemonMixin):
         for key, process in self.bpf[b'processes'].iteritems():
             logger.debug(key)
 
-    def cleanup(self):
-        """
+    def cleanup(self) -> None:
+        """cleanup.
+
         Perform cleanup hooks before exit.
+
+        Parameters
+        ----------
+
+        Returns
+        -------
+        None
+
         """
         self.dump_debug_data()
         self.save_profiles()
@@ -198,12 +328,21 @@ class BPFBoxd(DaemonMixin):
         except AttributeError:
             logger.warning("Unable to properly clean up BPF program")
 
-    def trace_print(self):
-        """
+    def trace_print(self) -> None:
+        """trace_print.
+
         Helper to print information from debugfs logfile until we have consumed it entirely.
 
         This is great for debugging, but should not be used in production, since the debugfs logfile
         is shared globally between all BPF programs.
+
+        Parameters
+        ----------
+
+        Returns
+        -------
+        None
+
         """
         while True:
             try:
@@ -217,9 +356,18 @@ class BPFBoxd(DaemonMixin):
                     "Could not correctly parse debug information from debugfs"
                 )
 
-    def loop_forever(self):
-        """
+    def loop_forever(self) -> NoReturn:
+        """loop_forever.
+
         BPFBoxd main event loop.
+
+        Parameters
+        ----------
+
+        Returns
+        -------
+        NoReturn
+
         """
         self.load_bpf()
         while 1:
@@ -229,10 +377,21 @@ class BPFBoxd(DaemonMixin):
             time.sleep(self.ticksleep)
 
 
-def main(args=sys.argv[1:]):
-    """
+def main(args=sys.argv[1:]) -> None:
+    """main.
+
     Main entrypoint for BPFBox daemon.
     Generally should be invoked with parse_args.
+
+    Parameters
+    ----------
+    args :
+        args
+
+    Returns
+    -------
+    None
+
     """
     args = parse_args(args)
     defs.init(args)
