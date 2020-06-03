@@ -136,7 +136,6 @@ class Policy:
         # Set whether we should taint on exec
         if 'TAINT' not in policy:
             self.should_taint_on_exec = 1
-        logger.debug(policy)
         return policy
 
     def post_generation_hooks(self, bpf):

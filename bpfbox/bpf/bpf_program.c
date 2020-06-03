@@ -58,6 +58,7 @@ static inline struct bpfbox_process *create_process(void *ctx, u32 pid,
     process.profile_key = 0;
     process.pid = pid;
     process.tgid = tgid;
+    process.context_mask = 0;
 
     return processes.lookup_or_try_init(&pid, &process);
 }

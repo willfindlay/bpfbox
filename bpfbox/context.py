@@ -25,12 +25,12 @@ class RuleContext:
         binary: str,
         context_mask: int = None,
         addr: int = None,
-        sym: bytes = b'',
+        sym: str = '',
     ):
         assert isinstance(binary, str)
         assert not context_mask or isinstance(context_mask, int)
         assert not addr or isinstance(addr, int)
-        assert isinstance(sym, bytes)
+        assert isinstance(sym, str) or isinstance(sym, bytes)
         if context_mask:
             assert addr or sym
         if addr or sym:
@@ -42,6 +42,8 @@ class RuleContext:
 
         self.addr = addr
         self.sym = sym
+        if isinstance(self.sym, str):
+            self.sym = self.sym.encode('utf-8')
 
         self.fs_rules = []
         self.net_rules = []
@@ -68,6 +70,8 @@ class RuleContext:
         text = text.replace('CONTEXTMASK', str(self.context_mask))
         text = text.replace('PROFILEKEY', str(self.profile_key))
 
+        return text
+
     def attach_uprobes(self, bpf: BPF) -> None:
         if not self.addr and not self.sym:
             return
@@ -76,10 +80,16 @@ class RuleContext:
         uretprobe = f'uretprobe_{self.context_mask}_{self.profile_key}'
 
         bpf.attach_uprobe(
-            name=self.binary, sym=self.sym, addr=self.addr, fn_name=uprobe,
+            name=self.binary.encode('utf-8'),
+            sym=self.sym,
+            addr=self.addr,
+            fn_name=uprobe.encode('utf-8'),
         )
         bpf.attach_uretprobe(
-            name=self.binary, sym=self.sym, addr=self.addr, fn_name=uretprobe,
+            name=self.binary.encode('utf-8'),
+            sym=self.sym,
+            addr=self.addr,
+            fn_name=uretprobe.encode('utf-8'),
         )
 
     def generate_rules(self) -> dict:
@@ -92,7 +102,9 @@ class RuleContext:
         }
 
     def _generate_fs_rules(self) -> str:
-        return '\n'.join([r.generate() for r in self.fs_rules])
+        return '\n'.join(
+            [r.generate(self.context_mask) for r in self.fs_rules]
+        )
 
     def _generate_net_bind_rules(self) -> str:
         pass

@@ -58,6 +58,7 @@ struct bpfbox_process
     u32 tgid;
     u64 profile_key;
     u8 tainted;
+    u64 context_mask;
 };
 
 /* ========================================================================= *

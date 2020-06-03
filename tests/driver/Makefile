@@ -2,9 +2,9 @@ TESTFILESDIR = /tmp/bpfbox
 
 CC     = gcc
 LDLAGS =
-CFLAGS =
+CFLAGS = -O0
 
-EXES   = networking open
+EXES   = networking open context_smoke
 
 .PHONY: all
 all: $(EXES)
@@ -27,3 +27,6 @@ networking: networking.c
 
 open: open.c | testfiles
 	$(CC) $(CFLAGS) $(LDFLAGS) -o open open.c
+
+context_smoke: context_smoke.c | testfiles
+	$(CC) $(CFLAGS) $(LDFLAGS) -o context_smoke context_smoke.c
