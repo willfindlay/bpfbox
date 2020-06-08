@@ -259,7 +259,7 @@ int kprobe__security_socket_bind(struct pt_regs *ctx, struct socket *sock,
 }
 
 int kprobe__security_socket_connect(struct pt_regs *ctx, struct socket *sock,
-                            struct sockaddr *address, int addrlen) {
+                                    struct sockaddr *address, int addrlen) {
     // Check pid and look up process if it exists
     u32 pid = bpf_get_current_pid_tgid();
     struct bpfbox_process *process = processes.lookup(&pid);
@@ -274,7 +274,7 @@ int kprobe__security_socket_connect(struct pt_regs *ctx, struct socket *sock,
     return 0;
 }
 int kprobe__security_socket_accept(struct pt_regs *ctx, struct socket *sock,
-                           struct socket *newsock) {
+                                   struct socket *newsock) {
     // Check pid and look up process if it exists
     u32 pid = bpf_get_current_pid_tgid();
     struct bpfbox_process *process = processes.lookup(&pid);
