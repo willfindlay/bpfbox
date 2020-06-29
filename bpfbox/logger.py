@@ -40,12 +40,14 @@ class BPFBoxLoggerClass(logging.getLoggerClass()):
     Custom logger class that allows for the logging of policy messages.
     """
 
-    POLICY = logging.WARN - 5
+    POLICY = logging.WARN - 2
+    AUDIT = logging.WARN - 1
 
     def __init__(self, name, level=logging.NOTSET):
         super().__init__(name, level)
 
         logging.addLevelName(BPFBoxLoggerClass.POLICY, "POLICY")
+        logging.addLevelName(BPFBoxLoggerClass.AUDIT, "AUDIT")
 
     def policy(self, msg, *args, **kwargs):
         """
@@ -54,6 +56,14 @@ class BPFBoxLoggerClass(logging.getLoggerClass()):
         """
         if self.isEnabledFor(BPFBoxLoggerClass.POLICY):
             self._log(BPFBoxLoggerClass.POLICY, msg, args, **kwargs)
+
+    def audit(self, msg, *args, **kwargs):
+        """
+        Write a audit message to logs.
+        This should be used to inform the user about audit decisions/enforcement.
+        """
+        if self.isEnabledFor(BPFBoxLoggerClass.AUDIT):
+            self._log(BPFBoxLoggerClass.AUDIT, msg, args, **kwargs)
 
 
 # Set logging to use custom BPFBoxLoggerClass
@@ -135,7 +145,7 @@ def setup_logger(args):
     elif args.debug:
         logger.setLevel(logging.DEBUG)
     else:
-        logger.setLevel(BPFBoxLoggerClass.POLICY)
+        logger.setLevel(BPFBoxLoggerClass.AUDIT)
 
     # Create and add handler
     if args.stdout:

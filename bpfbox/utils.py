@@ -29,68 +29,12 @@ import itertools
 import signal
 import subprocess
 
-from bcc import syscall
-
-# Mappings for syscall number to name, used in syscall_name()
-__syscalls = {
-    key: value.decode('utf-8') for key, value in syscall.syscalls.items()
-}
-
-# Mappings for syscall name to number, used in syscall_number()
-__syscalls_reverse = {value: key for key, value in __syscalls.items()}
-
-# Patch pread64 and pwrite64 into table
-__syscalls_reverse['pread64'] = __syscalls_reverse['pread']
-__syscalls_reverse['pwrite64'] = __syscalls_reverse['pwrite']
-
-
-def syscall_number(name):
-    """
-    Convert a system call name to a number. Case insensitive.
-    """
-    try:
-        return __syscalls_reverse[name.lower().strip()]
-    except KeyError:
-        return -1
-
-
-def syscall_name(num):
-    """
-    Convert a system call number to a name.
-    """
-    try:
-        return __syscalls[num]
-    except KeyError:
-        return '[unknown]'
-
-
-def access_name(num):
-    """
-    Convert file access const to name.
-    """
-    from bpfbox.rules import AccessMode
-
-    if num & AccessMode.MAY_READ:
-        r = 'r'
-    else:
-        r = ''
-
-    if num & AccessMode.MAY_WRITE:
-        w = 'w'
-    else:
-        w = ''
-
-    if num & AccessMode.MAY_APPEND:
-        a = 'a'
-    else:
-        a = ''
-
-    if num & AccessMode.MAY_EXEC:
-        x = 'x'
-    else:
-        x = ''
-
-    return ''.join([r, w, a, x])
+def format_comm(comm):
+    if isinstance(comm, bytes):
+        comm = comm.decode('utf-8', 'replace')
+    if ' ' in comm:
+        return '"%s"' % (comm)
+    return comm
 
 
 def get_inode_and_device(path, follow_symlink=True):

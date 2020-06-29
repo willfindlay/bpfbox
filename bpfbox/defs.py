@@ -25,7 +25,7 @@ import os, sys
 project_path = os.path.abspath(os.path.join(os.path.dirname(__file__), '..'))
 
 # Path to bpf program
-bpf_prog_path = os.path.join(project_path, 'bpfbox/bpf/bpf_program.c')
+bpf_prog_path = os.path.join(project_path, 'bpfbox/bpf/policy.c')
 
 # Time to sleep between daemon ticks in seconds
 ticksleep = 0.1
@@ -47,6 +47,12 @@ bpffs = '/sys/fs/bpf'
 
 # Size (in bits) of context masks for policy
 context_mask_size = 64
+
+# Maximum string size in bytes
+max_string_size = 128
+
+# Ringbuf sizes in pages
+audit_ringbuf_pages = 1 << 8
 
 
 def init(args):
