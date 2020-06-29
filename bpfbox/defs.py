@@ -54,6 +54,16 @@ max_string_size = 128
 # Ringbuf sizes in pages
 audit_ringbuf_pages = 1 << 8
 
+# Size of policy maps
+# Higher values allow more policy to be defined for each category, but
+# result in higher memory consumption
+max_policy_size = 10240
+
+# Size of processes map
+# Higher values allow bpfbox to monitor more processes at once
+# But results in higher memory consumption
+max_processes = 10240
+
 
 def init(args):
     """

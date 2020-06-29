@@ -53,6 +53,8 @@ class BPFBoxd(DaemonMixin):
         self.ticksleep = defs.ticksleep
         self.bpf_program = BPFProgram(self, enforcing=args.enforcing, debug=args.debug)
 
+        self._register_exit_hooks()
+
     def loop_forever(self) -> NoReturn:
         """loop_forever.
 

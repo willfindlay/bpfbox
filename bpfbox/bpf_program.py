@@ -9,7 +9,7 @@ from bcc import BPF
 from bpfbox import defs
 from bpfbox.logger import get_logger
 from bpfbox.flags import FS_ACCESS
-from bpfbox.utils import format_comm
+from bpfbox.utils import format_comm, calculate_profile_key
 
 logger = get_logger()
 
@@ -96,6 +96,10 @@ class BPFProgram:
         self.bpf = BPF(text=source.encode('utf-8'), cflags=cflags)
         self._register_ring_buffers()
 
+        # FIXME temporary testing
+        self._add_profile('/bin/git')
+        self._add_profile('/bin/exa')
+
         # Pin maps
         # if not maps_pinned:
         #    logger.info('Pinnings maps...')
@@ -120,17 +124,23 @@ class BPFProgram:
         except AttributeError:
             logger.warning("Unable to properly clean up BPF program")
 
+    def _add_profile(self, path, taint_on_exec=0):
+        profile = ct.c_uint8(taint_on_exec) # FIXME use struct instead
+        profile_key = calculate_profile_key(path)
+        self.bpf['profiles'][ct.c_uint64(profile_key)] = profile
+        self.profile_key_to_exe[profile_key] = path
+
     def _register_ring_buffers(self):
         logger.info('Registering ring buffers...')
 
         @ringbuf_callback(self.bpf, 'inode_audit_events')
         def inode_audit_events(ctx, event, size):
             logger.audit(
-                'uid=%-4d pid=%-10d comm=%-18s st_ino=%-10d st_dev=%-10d fs=%-10s access=%s'
+                'uid=%-4d pid=%-10d exe=%-20s st_ino=%-10d st_dev=%-10d fs=%-10s access=%s'
                 % (
                     event.uid,
                     event.pid,
-                    format_comm(event.comm),
+                    self.profile_key_to_exe[event.profile_key],
                     event.st_ino,
                     event.st_dev,
                     event.s_id.decode('utf-8'),
@@ -151,22 +161,26 @@ class BPFProgram:
         # Handle enforcing mode
         if self.enforcing:
             logger.info('BPF program will be loaded in enforcing mode')
-            flags.append(f'-DBB_ENFORCING')
+            flags.append(f'-DBPFBOX_ENFORCING')
         else:
             logger.info('BPF program will be loaded in permissive mode')
         # Handle pinned maps
         if maps_pinned:
-            flags.append(f'-DBB_MAPS_PINNED')
+            flags.append(f'-DBPFBOX_MAPS_PINNED')
         if self.debug:
-            flags.append(f'-DBB_DEBUG')
+            flags.append(f'-DBPFBOX_DEBUG')
 
         # Max string size
-        flags.append('-DBB_MAX_STRING_SIZE=%d' % (defs.max_string_size))
+        flags.append('-DBPFBOX_MAX_STRING_SIZE=%d' % (defs.max_string_size))
 
         # Ringbuf sizes
         flags.append(
-            '-DBB_AUDIT_RINGBUF_PAGES=%d' % (defs.audit_ringbuf_pages)
+            '-DBPFBOX_AUDIT_RINGBUF_PAGES=%d' % (defs.audit_ringbuf_pages)
         )
+
+        # Map sizes
+        flags.append('-DBPFBOX_MAX_POLICY_SIZE=%d' % (defs.max_policy_size))
+        flags.append('-DBPFBOX_MAX_PROCESSES=%d' % (defs.max_processes))
 
         logger.debug(
             'Using cflags:\n%s' % (indent('\n'.join(flags), ' ' * 32))
@@ -201,11 +215,8 @@ class BPFProgram:
             return
 
         # Dump profiles TODO
-        logger.debug('Dumping profiles...')
-        for key, profile in self.bpf[b'profiles'].iteritems():
-            logger.debug(key)
 
         # Dump processes TODO
-        logger.debug('Dumping processes...')
-        for key, process in self.bpf[b'processes'].iteritems():
-            logger.debug(key)
+        #logger.debug('Dumping processes...')
+        #for key, process in self.bpf[b'processes'].iteritems():
+        #    logger.debug(key)
