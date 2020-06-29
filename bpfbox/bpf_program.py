@@ -97,7 +97,6 @@ class BPFProgram:
         self._register_ring_buffers()
 
         # FIXME temporary testing
-        self._add_profile('/bin/git')
         self._add_profile('/bin/exa')
 
         # Pin maps
@@ -136,7 +135,7 @@ class BPFProgram:
         @ringbuf_callback(self.bpf, 'inode_audit_events')
         def inode_audit_events(ctx, event, size):
             logger.audit(
-                'uid=%-4d pid=%-10d exe=%-20s st_ino=%-10d st_dev=%-10d fs=%-10s access=%s'
+                'uid=%-4d   pid=%-8d   exe=%-10s   st_ino=%-8d   st_dev=%-4d (%s)   access=%s'
                 % (
                     event.uid,
                     event.pid,
