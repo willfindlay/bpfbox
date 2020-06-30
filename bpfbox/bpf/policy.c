@@ -142,8 +142,6 @@ static __always_inline enum bpfbox_action_t policy_decision(
         return deny_action;
     }
 
-    return deny_action;
-
     if (!policy) {
         if (process->tainted) {
             return deny_action;
