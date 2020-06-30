@@ -141,7 +141,7 @@ class BPFProgram:
         @ringbuf_callback(self.bpf, 'inode_audit_events')
         def inode_audit_events(ctx, event, size):
             logger.audit(
-                'ev=FS   action=%-8s   uid=%-4d   exe=%-18s   st_ino=%-8d   st_dev=%-12s   access=%-11s'
+                'ev=FS act=%-8s uid=%-4d exe=%-18s st_ino=%-8d st_dev=%-12s req=%-11s'
                 % (
                     BPFBOX_ACTION(event.action),
                     event.uid,
