@@ -1,14 +1,18 @@
 .PHONY: all
-all: paper
-
-.PHONY: paper
-paper:
-	$(MAKE) -C paper
+all: package
 
 .PHONY: install
-install:
+install: package libebph
 	echo "Not yet implemented"
 
 .PHONY: package
-package:
+package: libebph
 	pip3 install -e . -r requirements.txt
+
+.PHONY: libbpfbox
+libbpfbox:
+	$(MAKE) -C bpfbox/libbpfbox
+
+.PHONY: test
+test:
+	$(MAKE) -C tests

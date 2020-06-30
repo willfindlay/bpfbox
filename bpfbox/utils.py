@@ -15,11 +15,10 @@
     You should have received a copy of the GNU General Public License
     along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
-    William Findlay created this.
-        williamfindlay <àŧ> cmail.carleton.ca
-
     This file provides several utility functions and helpers that can be
     reused throughout the program.
+
+    2020-Apr-10  William Findlay  Created this.
 """
 
 
@@ -29,68 +28,7 @@ import itertools
 import signal
 import subprocess
 
-from bcc import syscall
-
-# Mappings for syscall number to name, used in syscall_name()
-__syscalls = {
-    key: value.decode('utf-8') for key, value in syscall.syscalls.items()
-}
-
-# Mappings for syscall name to number, used in syscall_number()
-__syscalls_reverse = {value: key for key, value in __syscalls.items()}
-
-# Patch pread64 and pwrite64 into table
-__syscalls_reverse['pread64'] = __syscalls_reverse['pread']
-__syscalls_reverse['pwrite64'] = __syscalls_reverse['pwrite']
-
-
-def syscall_number(name):
-    """
-    Convert a system call name to a number. Case insensitive.
-    """
-    try:
-        return __syscalls_reverse[name.lower().strip()]
-    except KeyError:
-        return -1
-
-
-def syscall_name(num):
-    """
-    Convert a system call number to a name.
-    """
-    try:
-        return __syscalls[num]
-    except KeyError:
-        return '[unknown]'
-
-
-def access_name(num):
-    """
-    Convert file access const to name.
-    """
-    from bpfbox.rules import AccessMode
-
-    if num & AccessMode.MAY_READ:
-        r = 'r'
-    else:
-        r = ''
-
-    if num & AccessMode.MAY_WRITE:
-        w = 'w'
-    else:
-        w = ''
-
-    if num & AccessMode.MAY_APPEND:
-        a = 'a'
-    else:
-        a = ''
-
-    if num & AccessMode.MAY_EXEC:
-        x = 'x'
-    else:
-        x = ''
-
-    return ''.join([r, w, a, x])
+from bpfbox.flags import BPFBOX_ACTION
 
 
 def get_inode_and_device(path, follow_symlink=True):
@@ -201,19 +139,12 @@ def run_binary(args_str):
     """
     Drop privileges and run a binary if it exists.
     """
-    # Wake up and do nothing on SIGCLHD
-    signal.signal(signal.SIGUSR1, lambda x, y: None)
-    # Reap zombies
-    signal.signal(signal.SIGCHLD, lambda x, y: os.wait())
     args = args_str.split()
     try:
         binary = which(args[0])
     except Exception:
         return -1
     pid = os.fork()
-    # Setup traced process
     if pid == 0:
-        signal.pause()
         os.execvp(binary, args)
-    # Return pid of traced process
     return pid

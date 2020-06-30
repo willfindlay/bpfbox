@@ -15,8 +15,10 @@
     You should have received a copy of the GNU General Public License
     along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
-    William Findlay created this.
-        williamfindlay <àŧ> cmail.carleton.ca
+    This file provides important definitions for both userspace and kernelspace.
+    Some of these are passed to the BPF program as compilation flags.
+
+    2020-Apr-10  William Findlay  Created this.
 """
 
 import os, sys
@@ -25,7 +27,11 @@ import os, sys
 project_path = os.path.abspath(os.path.join(os.path.dirname(__file__), '..'))
 
 # Path to bpf program
-bpf_prog_path = os.path.join(project_path, 'bpfbox/bpf/bpf_program.c')
+bpf_prog_path = os.path.join(project_path, 'bpfbox/bpf/policy.c')
+
+# Path to libbpfbox
+libbpfbox_dir =  os.path.join(project_path, 'bpfbox/libbpfbox')
+libbpfbox =  os.path.join(libbpfbox_dir, 'libbpfbox.so')
 
 # Time to sleep between daemon ticks in seconds
 ticksleep = 0.1
@@ -47,6 +53,22 @@ bpffs = '/sys/fs/bpf'
 
 # Size (in bits) of context masks for policy
 context_mask_size = 64
+
+# Maximum string size in bytes
+max_string_size = 128
+
+# Ringbuf sizes in pages
+audit_ringbuf_pages = 1 << 8
+
+# Size of policy maps
+# Higher values allow more policy to be defined for each category, but
+# result in higher memory consumption
+max_policy_size = 10240
+
+# Size of processes map
+# Higher values allow bpfbox to monitor more processes at once
+# But results in higher memory consumption
+max_processes = 10240
 
 
 def init(args):
