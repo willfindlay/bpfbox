@@ -15,11 +15,10 @@
     You should have received a copy of the GNU General Public License
     along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
-    William Findlay created this.
-        williamfindlay <àŧ> cmail.carleton.ca
-
     This file extends the standard library's logging interface for BPFBox's
     purposes.
+
+    2020-Apr-10  William Findlay  Created this.
 """
 
 import os, sys

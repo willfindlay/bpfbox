@@ -15,11 +15,10 @@
     You should have received a copy of the GNU General Public License
     along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
-    William Findlay created this.
-        williamfindlay <àŧ> cmail.carleton.ca
-
     This file provides several utility functions and helpers that can be
     reused throughout the program.
+
+    2020-Apr-10  William Findlay  Created this.
 """
 
 

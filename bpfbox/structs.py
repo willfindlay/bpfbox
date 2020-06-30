@@ -1,5 +1,3 @@
-#! /usr/bin/env python3
-
 """
     🐝 BPFBox 📦  Application-transparent sandboxing rules with eBPF.
     Copyright (C) 2020  William Findlay
@@ -17,14 +15,10 @@
     You should have received a copy of the GNU General Public License
     along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
-    Entrypoint for BPFBox.
+    This file provides ctypes structures to match those defined in
+    the BPF program.
 
-    2020-Apr-10  William Findlay  Created this.
+    2020-Jun-29  William Findlay  Created this.
 """
 
-
-from bpfbox.argument_parser import parse_args
-from bpfbox.bpfboxd import main
-
-if __name__ == "__main__":
-    main()
+import ctypes as ct
