@@ -47,8 +47,7 @@ struct bpfbox_profile_t {
     u8 taint_on_exec;
 };
 
-BPF_TABLE("lru_hash", u64, struct bpfbox_profile_t, profiles,
-          BPFBOX_MAX_POLICY_SIZE);
+BPF_HASH(profiles, u64, struct bpfbox_profile_t, BPFBOX_MAX_POLICY_SIZE);
 
 /* =========================================================================
  * Policy
@@ -73,8 +72,8 @@ struct policy_t {
     u32 taint;
 };
 
-BPF_TABLE("lru_hash", struct inode_policy_key_t, struct policy_t, inode_policy,
-          BPFBOX_MAX_POLICY_SIZE);
+BPF_HASH(inode_policy, struct inode_policy_key_t, struct policy_t,
+         BPFBOX_MAX_POLICY_SIZE);
 
 /* =========================================================================
  * Auditing
