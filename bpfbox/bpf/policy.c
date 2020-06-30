@@ -3,10 +3,8 @@
 #include <linux/sched.h>
 
 /* =========================================================================
- * Maps
+ * Processes
  * ========================================================================= */
-
-/* Processes */
 
 struct bpfbox_process_t {
     u64 profile_key;
@@ -18,7 +16,9 @@ struct bpfbox_process_t {
 BPF_TABLE("lru_hash", u32, struct bpfbox_process_t, processes,
           BPFBOX_MAX_PROCESSES);
 
-/* Profiles */
+/* =========================================================================
+ * Profiles
+ * ========================================================================= */
 
 struct bpfbox_profile_t {
     u8 taint_on_exec;
@@ -27,7 +27,9 @@ struct bpfbox_profile_t {
 BPF_TABLE("lru_hash", u64, struct bpfbox_profile_t, profiles,
           BPFBOX_MAX_POLICY_SIZE);
 
-/* Inode Policy */
+/* =========================================================================
+ * Policy
+ * ========================================================================= */
 
 struct inode_policy_key_t {
     u32 st_ino;
@@ -36,30 +38,48 @@ struct inode_policy_key_t {
 };
 
 enum bpfbox_action_t {
-    BPFBOX_ACTION_NONE = 0x0,
-    BPFBOX_ACTION_AUDIT = 0x1,
-    BPFBOX_ACTION_ALLOW = 0x2,
-    BPFBOX_ACTION_TAINT = 0x4,
+    ACTION_NONE = 0x0,
+    ACTION_AUDIT = 0x1,  // FIXME: unused, remove on python side and BPF side
+    ACTION_ALLOW = 0x2,
+    ACTION_TAINT = 0x4,
+    ACTION_DENY = 0x8,
+    ACTION_COMPLAIN = 0x10,
 };
 
-struct inode_policy_val_t {
-    int mask;
-    enum bpfbox_action_t action;
+struct policy_t {
+    u32 allow;
+    u32 taint;
+    // u32 audit;
 };
 
-BPF_TABLE("lru_hash", struct inode_policy_key_t, struct inode_policy_val_t,
-          inode_policy, BPFBOX_MAX_POLICY_SIZE);
+BPF_TABLE("lru_hash", struct inode_policy_key_t, struct policy_t, inode_policy,
+          BPFBOX_MAX_POLICY_SIZE);
 
 /* =========================================================================
- * Ring Buffers and Helpers
+ * Auditing
  * ========================================================================= */
+
+#define STRUCT_AUDIT_COMMON \
+    u32 uid;                \
+    u32 pid;                \
+    u64 profile_key;        \
+    enum bpfbox_action_t action;
+
+#define DO_AUDIT_COMMON(event, process, action)    \
+    do {                                           \
+        if (!event) {                              \
+            return;                                \
+        }                                          \
+        event->uid = bpf_get_current_uid_gid();    \
+        event->pid = process->pid;                 \
+        event->profile_key = process->profile_key; \
+        event->action = action;                    \
+    } while (0)
 
 BPF_RINGBUF_OUTPUT(inode_audit_events, BPFBOX_AUDIT_RINGBUF_PAGES);
 
 struct inode_audit_event_t {
-    u32 uid;
-    u32 pid;
-    u64 profile_key;
+    STRUCT_AUDIT_COMMON
     u32 st_ino;
     u32 st_dev;
     char s_id[32];
@@ -67,17 +87,11 @@ struct inode_audit_event_t {
 };
 
 static __always_inline void audit_inode(struct bpfbox_process_t *process,
+                                        enum bpfbox_action_t action,
                                         struct inode *inode, int mask) {
     struct inode_audit_event_t *event =
         inode_audit_events.ringbuf_reserve(sizeof(struct inode_audit_event_t));
-    if (!event) {
-        return;
-    }
-
-    event->uid = bpf_get_current_uid_gid();
-
-    event->pid = process->pid;
-    event->profile_key = process->profile_key;
+    DO_AUDIT_COMMON(event, process, action);
 
     event->st_ino = inode->i_ino;
     event->st_dev = (u32)new_encode_dev(inode->i_sb->s_dev);
@@ -88,7 +102,7 @@ static __always_inline void audit_inode(struct bpfbox_process_t *process,
 }
 
 /* =========================================================================
- * Generic Helper Functions
+ * Helper Functions
  * ========================================================================= */
 
 static __always_inline struct bpfbox_process_t *create_process(u32 pid,
@@ -111,10 +125,40 @@ static __always_inline struct bpfbox_process_t *get_current_process() {
     return processes.lookup(&pid);
 }
 
+static __always_inline enum bpfbox_action_t policy_decision(
+    struct policy_t *policy, u32 access_mask) {
+    struct bpfbox_process_t *process = get_current_process();
+    if (!process) {
+        return ACTION_DENY;
+    }
+
+    if (!policy) {
+        if (process->tainted) {
+            return ACTION_DENY;
+        } else {
+            return ACTION_ALLOW;
+        }
+    }
+
+    if (!process->tainted && (access_mask & policy->taint)) {
+        process->tainted = 1;
+        return ACTION_ALLOW | ACTION_TAINT;
+    }
+
+    if (!process->tainted) {
+        return ACTION_ALLOW;
+    }
+
+    if ((access_mask & policy->allow) == access_mask) {
+        return ACTION_ALLOW;
+    }
+
+    return ACTION_DENY;
+}
+
 /* =========================================================================
  * LSM Programs
- * =========================================================================
- */
+ * ========================================================================= */
 
 /* A task requests access <mask> to <inode> */
 LSM_PROBE(inode_permission, struct inode *inode, int mask) {
@@ -129,9 +173,14 @@ LSM_PROBE(inode_permission, struct inode *inode, int mask) {
         .profile_key = process->profile_key,
     };
 
-    audit_inode(process, inode, mask);
+    struct policy_t *policy = inode_policy.lookup(&key);
 
-    return 0;
+    mask &= (MAY_READ | MAY_WRITE | MAY_APPEND | MAY_EXEC);
+
+    enum bpfbox_action_t action = policy_decision(policy, mask);
+    audit_inode(process, action, inode, mask);
+
+    return action & ACTION_DENY ? -EPERM : 0;
 }
 
 /* =========================================================================

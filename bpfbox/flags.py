@@ -2,6 +2,9 @@ from enum import Enum, unique, _decompose, Flag as _Flag
 
 
 class Flag(_Flag):
+    """
+    enum.Flag but with better printing
+    """
     def __str__(self):
         cls = self.__class__
         if self._name_ is not None:
@@ -11,6 +14,17 @@ class Flag(_Flag):
             return '%r' % (members[0]._value_)
         else:
             return '|'.join([str(m._name_ or m._value_) for m in members])
+
+
+
+@unique
+class BPFBOX_ACTION(Flag):
+    ACTION_NONE = 0x0
+    ACTION_AUDIT = 0x1
+    ACTION_ALLOW = 0x2
+    ACTION_TAINT = 0x4
+    ACTION_DENY = 0x8
+    ACTION_COMPLAIN = 0x10
 
 
 @unique

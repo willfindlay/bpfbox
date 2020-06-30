@@ -8,8 +8,8 @@ from bcc import BPF
 
 from bpfbox import defs
 from bpfbox.logger import get_logger
-from bpfbox.flags import FS_ACCESS
-from bpfbox.utils import format_comm, calculate_profile_key
+from bpfbox.flags import BPFBOX_ACTION, FS_ACCESS
+from bpfbox.utils import format_comm, format_action, calculate_profile_key
 
 logger = get_logger()
 
@@ -135,8 +135,9 @@ class BPFProgram:
         @ringbuf_callback(self.bpf, 'inode_audit_events')
         def inode_audit_events(ctx, event, size):
             logger.audit(
-                'uid=%-4d   pid=%-8d   exe=%-10s   st_ino=%-8d   st_dev=%-4d (%s)   access=%s'
+                'action=%-8s   uid=%-4d   pid=%-8d   exe=%-10s   st_ino=%-8d   st_dev=%-4d (%s)   access=%s'
                 % (
+                    format_action(event.action),
                     event.uid,
                     event.pid,
                     self.profile_key_to_exe[event.profile_key],

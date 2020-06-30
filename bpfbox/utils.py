@@ -29,6 +29,14 @@ import itertools
 import signal
 import subprocess
 
+from bpfbox.flags import BPFBOX_ACTION
+
+def format_action(action):
+    astr = str(BPFBOX_ACTION(action))
+    if astr.startswith('ACTION_'):
+        astr = astr[len('ACTION_'):]
+    return astr
+
 def format_comm(comm):
     if isinstance(comm, bytes):
         comm = comm.decode('utf-8', 'replace')
