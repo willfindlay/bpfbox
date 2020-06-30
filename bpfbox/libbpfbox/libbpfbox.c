@@ -33,4 +33,4 @@ void add_profile(unsigned long long profile_key, unsigned char taint_on_exec){};
 
 void add_fs_rule(unsigned long long profile_key, unsigned long st_ino,
                  unsigned long st_dev, unsigned long access_mask,
-                 unsigned char taint){};
+                 unsigned int action){};

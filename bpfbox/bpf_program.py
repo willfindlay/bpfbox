@@ -122,23 +122,46 @@ class BPFProgram:
         self._generate_policy()
 
         # FIXME temporary testing
-        self._add_profile('/bin/exa', 1)
-        self._add_fs_rule('/bin/exa', "/etc/ld.so.cache", FS_ACCESS.MAY_READ)
-        self._add_fs_rule('/bin/exa', "/usr/lib/libz.so.1", FS_ACCESS.MAY_READ)
-        self._add_fs_rule('/bin/exa', "/usr/lib/libdl.so.2", FS_ACCESS.MAY_READ)
-        self._add_fs_rule('/bin/exa', "/usr/lib/librt.so.1", FS_ACCESS.MAY_READ)
-        self._add_fs_rule('/bin/exa', "/usr/lib/libpthread.so.0", FS_ACCESS.MAY_READ)
-        self._add_fs_rule('/bin/exa', "/usr/lib/libgcc_s.so.1", FS_ACCESS.MAY_READ)
-        self._add_fs_rule('/bin/exa', "/usr/lib/libc.so.6", FS_ACCESS.MAY_READ)
-        self._add_fs_rule('/bin/exa', "/proc/self/maps", FS_ACCESS.MAY_READ)
-        self._add_fs_rule('/bin/exa', "/root/bpfbox/bpfbox", FS_ACCESS.MAY_READ | FS_ACCESS.MAY_EXEC)
-        self._add_fs_rule('/bin/exa', "/usr/lib/perl5/5.30/core_perl/CORE/dquote_inline.h", FS_ACCESS.MAY_EXEC)
-        self._add_fs_rule('/bin/exa', "/usr/lib/libnss_files-2.31.so", FS_ACCESS.MAY_EXEC | FS_ACCESS.MAY_READ)
-        self._add_fs_rule('/bin/exa', "/etc/localtime", FS_ACCESS.MAY_READ | FS_ACCESS.MAY_EXEC)
-        self._add_fs_rule('/bin/exa', "/usr/lib/locale/locale-archive", FS_ACCESS.MAY_READ)
-        self._add_fs_rule('/bin/exa', "/etc/nsswitch.conf", FS_ACCESS.MAY_READ)
-        self._add_fs_rule('/bin/exa', "/etc/passwd", FS_ACCESS.MAY_READ)
-        self._add_fs_rule('/bin/exa', "/var", FS_ACCESS.MAY_EXEC)
+        self.add_profile('/bin/exa', 1)
+        self.add_fs_rule('/bin/exa', "/etc/ld.so.cache", FS_ACCESS.MAY_READ)
+        self.add_fs_rule('/bin/exa', "/usr/lib/libz.so.1", FS_ACCESS.MAY_READ)
+        self.add_fs_rule('/bin/exa', "/usr/lib/libdl.so.2", FS_ACCESS.MAY_READ)
+        self.add_fs_rule('/bin/exa', "/usr/lib/librt.so.1", FS_ACCESS.MAY_READ)
+        self.add_fs_rule(
+            '/bin/exa', "/usr/lib/libpthread.so.0", FS_ACCESS.MAY_READ
+        )
+        self.add_fs_rule(
+            '/bin/exa', "/usr/lib/libgcc_s.so.1", FS_ACCESS.MAY_READ
+        )
+        self.add_fs_rule('/bin/exa', "/usr/lib/libc.so.6", FS_ACCESS.MAY_READ)
+        self.add_fs_rule('/bin/exa', "/proc/self/maps", FS_ACCESS.MAY_READ)
+        self.add_fs_rule(
+            '/bin/exa',
+            "/root/bpfbox/bpfbox",
+            FS_ACCESS.MAY_READ | FS_ACCESS.MAY_EXEC,
+        )
+        self.add_fs_rule(
+            '/bin/exa',
+            "/usr/lib/perl5/5.30/core_perl/CORE/dquote_inline.h",
+            FS_ACCESS.MAY_EXEC,
+        )
+        self.add_fs_rule(
+            '/bin/exa',
+            "/usr/lib/libnss_files-2.31.so",
+            FS_ACCESS.MAY_EXEC | FS_ACCESS.MAY_READ,
+        )
+        self.add_fs_rule(
+            '/bin/exa',
+            "/etc/localtime",
+            FS_ACCESS.MAY_READ | FS_ACCESS.MAY_EXEC,
+        )
+        self.add_fs_rule(
+            '/bin/exa', "/usr/lib/locale/locale-archive", FS_ACCESS.MAY_READ
+        )
+        self.add_fs_rule('/bin/exa', "/etc/nsswitch.conf", FS_ACCESS.MAY_READ)
+        self.add_fs_rule('/bin/exa', "/etc/passwd", FS_ACCESS.MAY_READ)
+        self.add_fs_rule('/bin/exa', "/var", FS_ACCESS.MAY_EXEC)
+        self.add_fs_rule('/bin/exa', "/run/nscd", FS_ACCESS.MAY_EXEC)
 
         # Pin maps
         # if not maps_pinned:
@@ -264,24 +287,49 @@ class BPFProgram:
         # for key, process in self.bpf[b'processes'].iteritems():
         #    logger.debug(key)
 
-    def _add_profile(self, exe, taint_on_exec):
+    def _add_profile(self, profile_key: int, taint_on_exec: int) -> int:
         assert self.have_registered_uprobes
+        lib.add_profile(profile_key, taint_on_exec)
+        return 0
+
+    def add_profile(self, exe: str, taint_on_exec: bool) -> int:
         profile_key = calculate_profile_key(exe)
         self.profile_key_to_exe[profile_key] = exe
-        lib.add_profile(profile_key, taint_on_exec)
+        return self._add_profile(profile_key, taint_on_exec)
 
-    def _add_fs_rule(self, exe, path, access_mask, is_taint=False):
+    def _add_fs_rule(
+        self,
+        profile_key: int,
+        st_ino: int,
+        st_dev: int,
+        access_mask: FS_ACCESS,
+        action: BPFBOX_ACTION,
+    ) -> int:
         assert self.have_registered_uprobes
+        if not (action & BPFBOX_ACTION.DENY | BPFBOX_ACTION.COMPLAIN):
+            logger.error(
+                '_add_fs_rule: Action must be one of ALLOW, TAINT, or AUDIT'
+            )
+            return 1
+        lib.add_fs_rule(
+            profile_key, st_ino, st_dev, access_mask.value, action.value
+        )
+        return 0
+
+    def add_fs_rule(
+        self,
+        exe: str,
+        path: str,
+        access_mask: FS_ACCESS,
+        action: BPFBOX_ACTION = BPFBOX_ACTION.ALLOW,
+    ) -> int:
         profile_key = calculate_profile_key(exe)
         st_ino, st_dev = get_inode_and_device(path)
 
-        # access_mask must be a true int
-        access_mask = access_mask.value
+        self._add_fs_rule(profile_key, st_ino, st_dev, access_mask, action)
 
-        lib.add_fs_rule(profile_key, st_ino, st_dev, access_mask, is_taint)
-
-        if is_taint:
-            return
+        if not (action & BPFBOX_ACTION.ALLOW):
+            return 0
 
         # Handle full path access
         # FIXME: is this the best way to do this?
@@ -295,11 +343,8 @@ class BPFProgram:
                 break
             st_ino, st_dev = get_inode_and_device(head)
             access_mask = FS_ACCESS.MAY_EXEC
-            lib.add_fs_rule(profile_key, st_ino, st_dev, access_mask.value, 0)
+            self._add_fs_rule(
+                profile_key, st_ino, st_dev, access_mask, BPFBOX_ACTION.ALLOW
+            )
             if not tail:
                 break
-
-
-
-
-

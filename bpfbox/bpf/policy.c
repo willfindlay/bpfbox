@@ -62,15 +62,17 @@ BPF_HASH(profiles, u64, struct bpfbox_profile_t, BPFBOX_MAX_POLICY_SIZE);
 enum bpfbox_action_t {
     ACTION_NONE = 0x0,
     ACTION_ALLOW = 0x1,
-    ACTION_TAINT = 0x2,
-    ACTION_DENY = 0x4,
-    ACTION_COMPLAIN = 0x8,
+    ACTION_AUDIT = 0x2,
+    ACTION_TAINT = 0x4,
+    ACTION_DENY = 0x8,
+    ACTION_COMPLAIN = 0x10,
 };
 
 /* <allow> and <taint> are bitmasks that are matched against access vectors. */
 struct policy_t {
     u32 allow;
     u32 taint;
+    u32 audit;
 };
 
 /* Uniquely computes an (inode, profile) pair. */
@@ -92,6 +94,11 @@ BPF_HASH(inode_policy, struct inode_policy_key_t, struct policy_t,
     u32 pid;                \
     u64 profile_key;        \
     enum bpfbox_action_t action;
+
+#define FILTER_AUDIT(action)                                          \
+    if (!(action & (ACTION_COMPLAIN | ACTION_DENY | ACTION_AUDIT))) { \
+        return;                                                       \
+    }
 
 #define DO_AUDIT_COMMON(event, process, action)    \
     do {                                           \
@@ -118,8 +125,11 @@ static __always_inline void audit_inode(struct bpfbox_process_t *process,
                                         enum bpfbox_action_t action,
                                         struct inode *inode, int mask)
 {
+    FILTER_AUDIT(action);
+
     struct inode_audit_event_t *event =
         inode_audit_events.ringbuf_reserve(sizeof(struct inode_audit_event_t));
+
     DO_AUDIT_COMMON(event, process, action);
 
     event->st_ino = inode->i_ino;
@@ -157,19 +167,23 @@ static __always_inline struct bpfbox_process_t *get_current_process()
 }
 
 static __always_inline enum bpfbox_action_t policy_decision(
-    struct policy_t *policy, u32 access_mask)
+    struct bpfbox_process_t *process, struct policy_t *policy, u32 access_mask)
 {
+    // Set deny action based on whether or not we are enforcing
 #ifndef BPFBOX_ENFORCING
     enum bpfbox_action_t deny_action = ACTION_COMPLAIN;
 #else
     enum bpfbox_action_t deny_action = ACTION_DENY;
 #endif
 
-    struct bpfbox_process_t *process = get_current_process();
-    if (!process) {
-        return deny_action;
+    // Set allow action based on whether or not we want to audit
+    enum bpfbox_action_t allow_action = ACTION_ALLOW;
+    if (access_mask & policy->audit) {
+        allow_action |= ACTION_AUDIT;
     }
 
+    // If we have no policy for this object, either deny or allow,
+    // depending on if the process is tainted or not
     if (!policy) {
         if (process->tainted) {
             return deny_action;
@@ -178,19 +192,23 @@ static __always_inline enum bpfbox_action_t policy_decision(
         }
     }
 
+    // Taint process if we hit a taint rule
     if (!process->tainted && (access_mask & policy->taint)) {
         process->tainted = 1;
         return ACTION_ALLOW | ACTION_TAINT;
     }
 
+    // If we are not tainted
     if (!process->tainted) {
         return ACTION_ALLOW;
     }
 
+    // If we are tainted, but the operation is allowed
     if ((access_mask & policy->allow) == access_mask) {
         return ACTION_ALLOW;
     }
 
+    // Default deny
     return deny_action;
 }
 
@@ -216,7 +234,7 @@ LSM_PROBE(inode_permission, struct inode *inode, int mask)
 
     mask &= (MAY_READ | MAY_WRITE | MAY_APPEND | MAY_EXEC);
 
-    enum bpfbox_action_t action = policy_decision(policy, mask);
+    enum bpfbox_action_t action = policy_decision(process, policy, mask);
     audit_inode(process, action, inode, mask);
 
     return action & ACTION_DENY ? -EPERM : 0;
@@ -327,7 +345,17 @@ int add_fs_rule(struct pt_regs *ctx)
     u32 st_ino = PT_REGS_PARM2(ctx);
     u32 st_dev = PT_REGS_PARM3(ctx);
     u32 access_mask = PT_REGS_PARM4(ctx);
-    u8 taint_rule = PT_REGS_PARM5(ctx);
+    enum bpfbox_action_t action = PT_REGS_PARM5(ctx);
+
+    if (action & (ACTION_DENY | ACTION_COMPLAIN)) {
+        // TODO log error
+        return 1;
+    }
+
+    if (!(action & (ACTION_ALLOW | ACTION_AUDIT | ACTION_TAINT))) {
+        // TODO log error
+        return 1;
+    }
 
     struct bpfbox_profile_t *profile = profiles.lookup(&profile_key);
     if (!profile) {
@@ -347,10 +375,16 @@ int add_fs_rule(struct pt_regs *ctx)
         return 1;
     }
 
-    if (taint_rule) {
+    if (action & ACTION_TAINT) {
         policy->taint |= access_mask;
-    } else {
+    }
+
+    if (action & ACTION_ALLOW) {
         policy->allow |= access_mask;
+    }
+
+    if (action & ACTION_AUDIT) {
+        policy->audit |= access_mask;
     }
 
     return 0;

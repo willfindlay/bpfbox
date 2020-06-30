@@ -50,9 +50,10 @@ class Flag(_Flag):
 class BPFBOX_ACTION(Flag):
     NONE = 0x0
     ALLOW = 0x1
-    TAINT = 0x2
-    DENY = 0x4
-    COMPLAIN = 0x8
+    AUDIT = 0x2
+    TAINT = 0x4
+    DENY = 0x8
+    COMPLAIN = 0x10
 
 
 @unique
