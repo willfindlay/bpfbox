@@ -24,6 +24,11 @@
 #include <linux/binfmts.h>
 #include <linux/fs.h>
 #include <linux/sched.h>
+#include <linux/version.h>
+
+#if LINUX_VERSION_CODE < KERNEL_VERSION(5, 8, 0)
+#error BPFBox requires Linux 5.8+
+#endif
 
 /* =========================================================================
  * Processes
@@ -53,12 +58,7 @@ BPF_HASH(profiles, u64, struct bpfbox_profile_t, BPFBOX_MAX_POLICY_SIZE);
  * Policy
  * ========================================================================= */
 
-struct inode_policy_key_t {
-    u32 st_ino;
-    u32 st_dev;
-    u64 profile_key;
-};
-
+/* Each action represents a BPFBox policy decision. */
 enum bpfbox_action_t {
     ACTION_NONE = 0x0,
     ACTION_ALLOW = 0x1,
@@ -67,9 +67,17 @@ enum bpfbox_action_t {
     ACTION_COMPLAIN = 0x8,
 };
 
+/* <allow> and <taint> are bitmasks that are matched against access vectors. */
 struct policy_t {
     u32 allow;
     u32 taint;
+};
+
+/* Uniquely computes an (inode, profile) pair. */
+struct inode_policy_key_t {
+    u32 st_ino;
+    u32 st_dev;
+    u64 profile_key;
 };
 
 BPF_HASH(inode_policy, struct inode_policy_key_t, struct policy_t,
