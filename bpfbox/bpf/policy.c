@@ -140,6 +140,25 @@ static __always_inline void audit_inode(struct bpfbox_process_t *process,
     inode_audit_events.ringbuf_submit(event, 0);
 }
 
+BPF_RINGBUF_OUTPUT(network_audit_events, BPFBOX_AUDIT_RINGBUF_PAGES);
+
+struct network_audit_event_t {
+    STRUCT_AUDIT_COMMON
+};
+
+static __always_inline void audit_network(struct bpfbox_process_t *process,
+                                          enum bpfbox_action_t action)
+{
+    FILTER_AUDIT(action);
+
+    struct network_audit_event_t *event = network_audit_events.ringbuf_reserve(
+        sizeof(struct inode_audit_event_t));
+
+    DO_AUDIT_COMMON(event, process, action);
+
+    network_audit_events.ringbuf_submit(event, 0);
+}
+
 /* =========================================================================
  * Helper Functions
  * ========================================================================= */
@@ -217,7 +236,7 @@ static __always_inline enum bpfbox_action_t policy_decision(
  * ========================================================================= */
 
 /* A task requests access <mask> to <inode> */
-LSM_PROBE(inode_permission, struct inode *inode, int mask)
+LSM_PROBE(inode_permission, struct inode *inode, int access_mask)
 {
     struct bpfbox_process_t *process = get_current_process();
     if (!process) {
@@ -232,10 +251,10 @@ LSM_PROBE(inode_permission, struct inode *inode, int mask)
 
     struct policy_t *policy = inode_policy.lookup(&key);
 
-    mask &= (MAY_READ | MAY_WRITE | MAY_APPEND | MAY_EXEC);
+    access_mask &= (MAY_READ | MAY_WRITE | MAY_APPEND | MAY_EXEC);
 
-    enum bpfbox_action_t action = policy_decision(process, policy, mask);
-    audit_inode(process, action, inode, mask);
+    enum bpfbox_action_t action = policy_decision(process, policy, access_mask);
+    audit_inode(process, action, inode, access_mask);
 
     return action & ACTION_DENY ? -EPERM : 0;
 }

@@ -4,7 +4,7 @@ CC     = gcc
 LDLAGS =
 CFLAGS = -O0
 
-EXES   = networking open context_smoke
+EXES   = open
 
 .PHONY: all
 all: $(EXES)
@@ -20,13 +20,6 @@ testfiles:
 	touch $(TESTFILESDIR)/b
 	touch $(TESTFILESDIR)/c
 	touch $(TESTFILESDIR)/d
-	chmod +x $(TESTFILESDIR)/d
-
-networking: networking.c
-	$(CC) $(CFLAGS) $(LDFLAGS) -o networking networking.c
 
 open: open.c | testfiles
 	$(CC) $(CFLAGS) $(LDFLAGS) -o open open.c
-
-context_smoke: context_smoke.c | testfiles
-	$(CC) $(CFLAGS) $(LDFLAGS) -o context_smoke context_smoke.c

@@ -38,6 +38,7 @@ class Policy(ct.Structure):
     _fields_ = (
         ('allow', ct.c_uint32),
         ('taint', ct.c_uint32),
+        ('audit', ct.c_uint32),
     )
 
 

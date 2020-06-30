@@ -50,7 +50,7 @@ class BPFBoxd(DaemonMixin):
 
     def __init__(self, args: List[str]):
         self.ticksleep = defs.ticksleep
-        self.bpf_program = BPFProgram(self, enforcing=args.enforcing, debug=args.debug)
+        self.bpf_program = BPFProgram(enforcing=args.enforcing, debug=args.debug)
 
         self._register_exit_hooks()
 

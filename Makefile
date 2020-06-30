@@ -12,3 +12,7 @@ package: libebph
 .PHONY: libbpfbox
 libbpfbox:
 	$(MAKE) -C bpfbox/libbpfbox
+
+.PHONY: test
+test:
+	$(MAKE) -C tests

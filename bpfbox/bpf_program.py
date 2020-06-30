@@ -50,9 +50,8 @@ def ringbuf_callback(bpf, map_name, infer_type=True):
 
 
 class BPFProgram:
-    def __init__(self, daemon, enforcing=True, debug=False):
+    def __init__(self, enforcing=True, debug=False):
         self.bpf = None
-        self.daemon = daemon
         self.debug = debug
         self.enforcing = enforcing
         self.profile_key_to_exe = defaultdict(lambda x: '[unknown]')
@@ -122,7 +121,7 @@ class BPFProgram:
         self._generate_policy()
 
         # FIXME temporary testing
-        self.add_profile('/bin/exa', 1)
+        self.add_profile('/bin/exa', taint_on_exec=False)
         self.add_fs_rule('/bin/exa', "/etc/ld.so.cache", FS_ACCESS.MAY_READ)
         self.add_fs_rule('/bin/exa', "/usr/lib/libz.so.1", FS_ACCESS.MAY_READ)
         self.add_fs_rule('/bin/exa', "/usr/lib/libdl.so.2", FS_ACCESS.MAY_READ)
@@ -283,8 +282,8 @@ class BPFProgram:
         # Dump profiles TODO
 
         # Dump processes TODO
-        # logger.debug('Dumping processes...')
-        # for key, process in self.bpf[b'processes'].iteritems():
+        #logger.debug('Dumping processes...')
+        #for key, process in self.bpf[b'processes'].iteritems():
         #    logger.debug(key)
 
     def _add_profile(self, profile_key: int, taint_on_exec: int) -> int:
@@ -324,7 +323,11 @@ class BPFProgram:
         action: BPFBOX_ACTION = BPFBOX_ACTION.ALLOW,
     ) -> int:
         profile_key = calculate_profile_key(exe)
-        st_ino, st_dev = get_inode_and_device(path)
+        try:
+            st_ino, st_dev = get_inode_and_device(path)
+        except FileNotFoundError:
+            logger.warning('add_fs_rule: Unable to find file %s' % (path))
+            return -1
 
         self._add_fs_rule(profile_key, st_ino, st_dev, access_mask, action)
 
@@ -341,7 +344,11 @@ class BPFProgram:
             head, tail = os.path.split(head)
             if not head:
                 break
-            st_ino, st_dev = get_inode_and_device(head)
+            try:
+                st_ino, st_dev = get_inode_and_device(head)
+            except FileNotFoundError:
+                logger.warning('add_fs_rule: Unable to find file %s' % (head))
+                continue
             access_mask = FS_ACCESS.MAY_EXEC
             self._add_fs_rule(
                 profile_key, st_ino, st_dev, access_mask, BPFBOX_ACTION.ALLOW
