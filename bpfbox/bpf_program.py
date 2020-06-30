@@ -89,12 +89,12 @@ class BPFProgram:
             source = f.read()
 
         cflags = self._set_cflags(maps_pinned)
-        self._generate_policy(source)
         # Load the bpf program
         logger.info('Loading BPF program...')
         logger.debug('BPF program source:\n%s' % (source))
         self.bpf = BPF(text=source.encode('utf-8'), cflags=cflags)
         self._register_ring_buffers()
+        self._generate_policy()
 
         # FIXME temporary testing
         self._add_profile('/bin/exa')
@@ -148,10 +148,10 @@ class BPFProgram:
                 )
             )
 
-    def _generate_policy(self, source):
+    def _generate_policy(self):
         logger.info('Generating policy...')
-        # TODO
-        return source
+        logger.warning('TODO')
+
 
     def _set_cflags(self, maps_pinned):
         flags = []

@@ -88,7 +88,8 @@ struct inode_audit_event_t {
 
 static __always_inline void audit_inode(struct bpfbox_process_t *process,
                                         enum bpfbox_action_t action,
-                                        struct inode *inode, int mask) {
+                                        struct inode *inode, int mask)
+{
     struct inode_audit_event_t *event =
         inode_audit_events.ringbuf_reserve(sizeof(struct inode_audit_event_t));
     DO_AUDIT_COMMON(event, process, action);
@@ -108,7 +109,8 @@ static __always_inline void audit_inode(struct bpfbox_process_t *process,
 static __always_inline struct bpfbox_process_t *create_process(u32 pid,
                                                                u32 tgid,
                                                                u64 profile_key,
-                                                               u8 tainted) {
+                                                               u8 tainted)
+{
     struct bpfbox_process_t new_process = {};
     new_process.pid = pid;
     new_process.tgid = tgid;
@@ -120,21 +122,31 @@ static __always_inline struct bpfbox_process_t *create_process(u32 pid,
     return processes.lookup(&pid);
 }
 
-static __always_inline struct bpfbox_process_t *get_current_process() {
+static __always_inline struct bpfbox_process_t *get_current_process()
+{
     u32 pid = bpf_get_current_pid_tgid();
     return processes.lookup(&pid);
 }
 
 static __always_inline enum bpfbox_action_t policy_decision(
-    struct policy_t *policy, u32 access_mask) {
+    struct policy_t *policy, u32 access_mask)
+{
+#ifndef BPFBOX_ENFORCING
+    enum bpfbox_action_t deny_action = ACTION_COMPLAIN;
+#else
+    enum bpfbox_action_t deny_action = ACTION_DENY;
+#endif
+
     struct bpfbox_process_t *process = get_current_process();
     if (!process) {
-        return ACTION_DENY;
+        return deny_action;
     }
+
+    return deny_action;
 
     if (!policy) {
         if (process->tainted) {
-            return ACTION_DENY;
+            return deny_action;
         } else {
             return ACTION_ALLOW;
         }
@@ -153,7 +165,7 @@ static __always_inline enum bpfbox_action_t policy_decision(
         return ACTION_ALLOW;
     }
 
-    return ACTION_DENY;
+    return deny_action;
 }
 
 /* =========================================================================
@@ -161,7 +173,8 @@ static __always_inline enum bpfbox_action_t policy_decision(
  * ========================================================================= */
 
 /* A task requests access <mask> to <inode> */
-LSM_PROBE(inode_permission, struct inode *inode, int mask) {
+LSM_PROBE(inode_permission, struct inode *inode, int mask)
+{
     struct bpfbox_process_t *process = get_current_process();
     if (!process) {
         return 0;
@@ -188,7 +201,8 @@ LSM_PROBE(inode_permission, struct inode *inode, int mask) {
  * ========================================================================= */
 
 /* A task fork()s/clone()s/vfork()s */
-RAW_TRACEPOINT_PROBE(sched_process_fork) {
+RAW_TRACEPOINT_PROBE(sched_process_fork)
+{
     struct bpfbox_process_t *process;
     struct bpfbox_process_t *parent_process;
 
@@ -217,7 +231,8 @@ RAW_TRACEPOINT_PROBE(sched_process_fork) {
 }
 
 /* A task execve()s */
-RAW_TRACEPOINT_PROBE(sched_process_exec) {
+RAW_TRACEPOINT_PROBE(sched_process_exec)
+{
     struct bpfbox_process_t *process;
     struct bpfbox_profile_t *profile;
 
@@ -249,7 +264,8 @@ RAW_TRACEPOINT_PROBE(sched_process_exec) {
 }
 
 /* A task exit()s/exit_group()s or is killed by kernel */
-RAW_TRACEPOINT_PROBE(sched_process_exit) {
+RAW_TRACEPOINT_PROBE(sched_process_exit)
+{
     // Delete the process if it exists
     u32 pid = (u32)bpf_get_current_pid_tgid();
     processes.delete(&pid);
