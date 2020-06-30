@@ -144,7 +144,7 @@ def setup_logger(args):
     elif args.debug:
         logger.setLevel(logging.DEBUG)
     else:
-        logger.setLevel(BPFBoxLoggerClass.AUDIT)
+        logger.setLevel(logging.INFO)
 
     # Create and add handler
     if args.stdout:

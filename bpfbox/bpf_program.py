@@ -31,7 +31,8 @@ from bcc import BPF
 from bpfbox import defs
 from bpfbox.logger import get_logger
 from bpfbox.flags import BPFBOX_ACTION, FS_ACCESS
-from bpfbox.utils import calculate_profile_key
+from bpfbox.utils import calculate_profile_key, get_inode_and_device
+from bpfbox.libbpfbox import lib, register_uprobes
 
 logger = get_logger()
 
@@ -55,6 +56,7 @@ class BPFProgram:
         self.debug = debug
         self.enforcing = enforcing
         self.profile_key_to_exe = defaultdict(lambda x: '[unknown]')
+        self.have_registered_uprobes = False
 
     def do_tick(self) -> None:
         """do_tick.
@@ -116,10 +118,27 @@ class BPFProgram:
         logger.debug('BPF program source:\n%s' % (source))
         self.bpf = BPF(text=source.encode('utf-8'), cflags=cflags)
         self._register_ring_buffers()
+        self._register_uprobes()
         self._generate_policy()
 
         # FIXME temporary testing
-        self._add_profile('/bin/exa')
+        self._add_profile('/bin/exa', 1)
+        self._add_fs_rule('/bin/exa', "/etc/ld.so.cache", FS_ACCESS.MAY_READ)
+        self._add_fs_rule('/bin/exa', "/usr/lib/libz.so.1", FS_ACCESS.MAY_READ)
+        self._add_fs_rule('/bin/exa', "/usr/lib/libdl.so.2", FS_ACCESS.MAY_READ)
+        self._add_fs_rule('/bin/exa', "/usr/lib/librt.so.1", FS_ACCESS.MAY_READ)
+        self._add_fs_rule('/bin/exa', "/usr/lib/libpthread.so.0", FS_ACCESS.MAY_READ)
+        self._add_fs_rule('/bin/exa', "/usr/lib/libgcc_s.so.1", FS_ACCESS.MAY_READ)
+        self._add_fs_rule('/bin/exa', "/usr/lib/libc.so.6", FS_ACCESS.MAY_READ)
+        self._add_fs_rule('/bin/exa', "/proc/self/maps", FS_ACCESS.MAY_READ)
+        self._add_fs_rule('/bin/exa', "/root/bpfbox/bpfbox", FS_ACCESS.MAY_READ | FS_ACCESS.MAY_EXEC)
+        self._add_fs_rule('/bin/exa', "/usr/lib/perl5/5.30/core_perl/CORE/dquote_inline.h", FS_ACCESS.MAY_EXEC)
+        self._add_fs_rule('/bin/exa', "/usr/lib/libnss_files-2.31.so", FS_ACCESS.MAY_EXEC | FS_ACCESS.MAY_READ)
+        self._add_fs_rule('/bin/exa', "/etc/localtime", FS_ACCESS.MAY_READ | FS_ACCESS.MAY_EXEC)
+        self._add_fs_rule('/bin/exa', "/usr/lib/locale/locale-archive", FS_ACCESS.MAY_READ)
+        self._add_fs_rule('/bin/exa', "/etc/nsswitch.conf", FS_ACCESS.MAY_READ)
+        self._add_fs_rule('/bin/exa', "/etc/passwd", FS_ACCESS.MAY_READ)
+        self._add_fs_rule('/bin/exa', "/var", FS_ACCESS.MAY_EXEC)
 
         # Pin maps
         # if not maps_pinned:
@@ -145,12 +164,6 @@ class BPFProgram:
         except AttributeError:
             logger.warning("Unable to properly clean up BPF program")
 
-    def _add_profile(self, path, taint_on_exec=0):
-        profile = ct.c_uint8(taint_on_exec)  # FIXME use struct instead
-        profile_key = calculate_profile_key(path)
-        self.bpf['profiles'][ct.c_uint64(profile_key)] = profile
-        self.profile_key_to_exe[profile_key] = path
-
     def _format_exe(self, profile_key, pid):
         return '%s (%d)' % (self.profile_key_to_exe[profile_key], pid)
 
@@ -173,6 +186,11 @@ class BPFProgram:
                     FS_ACCESS(event.mask),
                 )
             )
+
+    def _register_uprobes(self):
+        logger.info('Registering uprobes...')
+        register_uprobes(self.bpf)
+        self.have_registered_uprobes = True
 
     def _generate_policy(self):
         logger.info('Generating policy...')
@@ -245,3 +263,43 @@ class BPFProgram:
         # logger.debug('Dumping processes...')
         # for key, process in self.bpf[b'processes'].iteritems():
         #    logger.debug(key)
+
+    def _add_profile(self, exe, taint_on_exec):
+        assert self.have_registered_uprobes
+        profile_key = calculate_profile_key(exe)
+        self.profile_key_to_exe[profile_key] = exe
+        lib.add_profile(profile_key, taint_on_exec)
+
+    def _add_fs_rule(self, exe, path, access_mask, is_taint=False):
+        assert self.have_registered_uprobes
+        profile_key = calculate_profile_key(exe)
+        st_ino, st_dev = get_inode_and_device(path)
+
+        # access_mask must be a true int
+        access_mask = access_mask.value
+
+        lib.add_fs_rule(profile_key, st_ino, st_dev, access_mask, is_taint)
+
+        if is_taint:
+            return
+
+        # Handle full path access
+        # FIXME: is this the best way to do this?
+        try:
+            head = os.readlink(path)
+        except OSError:
+            head = path
+        while True:
+            head, tail = os.path.split(head)
+            if not head:
+                break
+            st_ino, st_dev = get_inode_and_device(head)
+            access_mask = FS_ACCESS.MAY_EXEC
+            lib.add_fs_rule(profile_key, st_ino, st_dev, access_mask.value, 0)
+            if not tail:
+                break
+
+
+
+
+

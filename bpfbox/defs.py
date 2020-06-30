@@ -29,6 +29,10 @@ project_path = os.path.abspath(os.path.join(os.path.dirname(__file__), '..'))
 # Path to bpf program
 bpf_prog_path = os.path.join(project_path, 'bpfbox/bpf/policy.c')
 
+# Path to libbpfbox
+libbpfbox_dir =  os.path.join(project_path, 'bpfbox/libbpfbox')
+libbpfbox =  os.path.join(libbpfbox_dir, 'libbpfbox.so')
+
 # Time to sleep between daemon ticks in seconds
 ticksleep = 0.1
 

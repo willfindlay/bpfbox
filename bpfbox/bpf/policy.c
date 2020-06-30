@@ -298,3 +298,60 @@ RAW_TRACEPOINT_PROBE(sched_process_exit)
 
     return 0;
 }
+
+/* =========================================================================
+ * Uprobes for libbpfbox Operations
+ * ========================================================================= */
+
+int add_profile(struct pt_regs *ctx)
+{
+    u64 profile_key = PT_REGS_PARM1(ctx);
+    u8 taint_on_exec = PT_REGS_PARM2(ctx);
+
+    struct bpfbox_profile_t _init = {};
+    struct bpfbox_profile_t *profile =
+        profiles.lookup_or_try_init(&profile_key, &_init);
+    if (!profile) {
+        // TODO log error
+        return 1;
+    }
+
+    profile->taint_on_exec = taint_on_exec;
+
+    return 0;
+}
+
+int add_fs_rule(struct pt_regs *ctx)
+{
+    u64 profile_key = PT_REGS_PARM1(ctx);
+    u32 st_ino = PT_REGS_PARM2(ctx);
+    u32 st_dev = PT_REGS_PARM3(ctx);
+    u32 access_mask = PT_REGS_PARM4(ctx);
+    u8 taint_rule = PT_REGS_PARM5(ctx);
+
+    struct bpfbox_profile_t *profile = profiles.lookup(&profile_key);
+    if (!profile) {
+        // TODO log error
+        return 1;
+    }
+
+    struct inode_policy_key_t key = {};
+    key.profile_key = profile_key;
+    key.st_ino = st_ino;
+    key.st_dev = st_dev;
+
+    struct policy_t _init = {};
+    struct policy_t *policy = inode_policy.lookup_or_try_init(&key, &_init);
+    if (!policy) {
+        // TODO log error
+        return 1;
+    }
+
+    if (taint_rule) {
+        policy->taint |= access_mask;
+    } else {
+        policy->allow |= access_mask;
+    }
+
+    return 0;
+}
