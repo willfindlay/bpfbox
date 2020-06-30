@@ -9,7 +9,7 @@ from bcc import BPF
 from bpfbox import defs
 from bpfbox.logger import get_logger
 from bpfbox.flags import BPFBOX_ACTION, FS_ACCESS
-from bpfbox.utils import format_exe, calculate_profile_key
+from bpfbox.utils import calculate_profile_key
 
 logger = get_logger()
 
@@ -129,21 +129,26 @@ class BPFProgram:
         self.bpf['profiles'][ct.c_uint64(profile_key)] = profile
         self.profile_key_to_exe[profile_key] = path
 
+    def _format_exe(self, profile_key, pid):
+        return '%s (%d)' % (self.profile_key_to_exe[profile_key], pid)
+
+    def _format_dev(self, s_id, st_dev):
+        return '%-4d (%s)' % (st_dev, s_id)
+
     def _register_ring_buffers(self):
         logger.info('Registering ring buffers...')
 
         @ringbuf_callback(self.bpf, 'inode_audit_events')
         def inode_audit_events(ctx, event, size):
             logger.audit(
-                'action=FS_%-8s   access=%-11s   uid=%-4d   exe=%-18s   st_ino=%-8d   st_dev=%-4d (%s)'
+                'ev=FS   action=%-8s   uid=%-4d   exe=%-18s   st_ino=%-8d   st_dev=%-12s   access=%-11s'
                 % (
                     BPFBOX_ACTION(event.action),
-                    FS_ACCESS(event.mask),
                     event.uid,
-                    format_exe(self, event.profile_key, event.pid),
+                    self._format_exe(event.profile_key, event.pid),
                     event.st_ino,
-                    event.st_dev,
-                    event.s_id.decode('utf-8'),
+                    self._format_dev(event.s_id.decode('utf-8'), event.st_dev),
+                    FS_ACCESS(event.mask),
                 )
             )
 

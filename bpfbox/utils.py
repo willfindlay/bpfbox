@@ -31,16 +31,6 @@ import subprocess
 
 from bpfbox.flags import BPFBOX_ACTION
 
-def format_exe(bpf_program, profile_key, pid):
-    return '%s (%d)' % (bpf_program.profile_key_to_exe[profile_key], pid)
-
-def format_comm(comm):
-    if isinstance(comm, bytes):
-        comm = comm.decode('utf-8', 'replace')
-    if ' ' in comm:
-        return '"%s"' % (comm)
-    return comm
-
 
 def get_inode_and_device(path, follow_symlink=True):
     """
