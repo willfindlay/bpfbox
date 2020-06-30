@@ -39,17 +39,15 @@ struct inode_policy_key_t {
 
 enum bpfbox_action_t {
     ACTION_NONE = 0x0,
-    ACTION_AUDIT = 0x1,  // FIXME: unused, remove on python side and BPF side
-    ACTION_ALLOW = 0x2,
-    ACTION_TAINT = 0x4,
-    ACTION_DENY = 0x8,
-    ACTION_COMPLAIN = 0x10,
+    ACTION_ALLOW = 0x1,
+    ACTION_TAINT = 0x2,
+    ACTION_DENY = 0x4,
+    ACTION_COMPLAIN = 0x8,
 };
 
 struct policy_t {
     u32 allow;
     u32 taint;
-    // u32 audit;
 };
 
 BPF_TABLE("lru_hash", struct inode_policy_key_t, struct policy_t, inode_policy,

@@ -9,7 +9,7 @@ from bcc import BPF
 from bpfbox import defs
 from bpfbox.logger import get_logger
 from bpfbox.flags import BPFBOX_ACTION, FS_ACCESS
-from bpfbox.utils import format_comm, format_action, calculate_profile_key
+from bpfbox.utils import format_exe, calculate_profile_key
 
 logger = get_logger()
 
@@ -124,7 +124,7 @@ class BPFProgram:
             logger.warning("Unable to properly clean up BPF program")
 
     def _add_profile(self, path, taint_on_exec=0):
-        profile = ct.c_uint8(taint_on_exec) # FIXME use struct instead
+        profile = ct.c_uint8(taint_on_exec)  # FIXME use struct instead
         profile_key = calculate_profile_key(path)
         self.bpf['profiles'][ct.c_uint64(profile_key)] = profile
         self.profile_key_to_exe[profile_key] = path
@@ -135,23 +135,21 @@ class BPFProgram:
         @ringbuf_callback(self.bpf, 'inode_audit_events')
         def inode_audit_events(ctx, event, size):
             logger.audit(
-                'action=%-8s   uid=%-4d   pid=%-8d   exe=%-10s   st_ino=%-8d   st_dev=%-4d (%s)   access=%s'
+                'action=FS_%-8s   access=%-11s   uid=%-4d   exe=%-18s   st_ino=%-8d   st_dev=%-4d (%s)'
                 % (
-                    format_action(event.action),
+                    BPFBOX_ACTION(event.action),
+                    FS_ACCESS(event.mask),
                     event.uid,
-                    event.pid,
-                    self.profile_key_to_exe[event.profile_key],
+                    format_exe(self, event.profile_key, event.pid),
                     event.st_ino,
                     event.st_dev,
                     event.s_id.decode('utf-8'),
-                    str(FS_ACCESS(event.mask)),
                 )
             )
 
     def _generate_policy(self):
         logger.info('Generating policy...')
         logger.warning('TODO')
-
 
     def _set_cflags(self, maps_pinned):
         flags = []
@@ -217,6 +215,6 @@ class BPFProgram:
         # Dump profiles TODO
 
         # Dump processes TODO
-        #logger.debug('Dumping processes...')
-        #for key, process in self.bpf[b'processes'].iteritems():
+        # logger.debug('Dumping processes...')
+        # for key, process in self.bpf[b'processes'].iteritems():
         #    logger.debug(key)

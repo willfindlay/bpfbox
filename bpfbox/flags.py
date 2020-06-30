@@ -19,12 +19,11 @@ class Flag(_Flag):
 
 @unique
 class BPFBOX_ACTION(Flag):
-    ACTION_NONE = 0x0
-    ACTION_AUDIT = 0x1
-    ACTION_ALLOW = 0x2
-    ACTION_TAINT = 0x4
-    ACTION_DENY = 0x8
-    ACTION_COMPLAIN = 0x10
+    NONE = 0x0
+    ALLOW = 0x1
+    TAINT = 0x2
+    DENY = 0x4
+    COMPLAIN = 0x8
 
 
 @unique

@@ -31,11 +31,8 @@ import subprocess
 
 from bpfbox.flags import BPFBOX_ACTION
 
-def format_action(action):
-    astr = str(BPFBOX_ACTION(action))
-    if astr.startswith('ACTION_'):
-        astr = astr[len('ACTION_'):]
-    return astr
+def format_exe(bpf_program, profile_key, pid):
+    return '%s (%d)' % (bpf_program.profile_key_to_exe[profile_key], pid)
 
 def format_comm(comm):
     if isinstance(comm, bytes):
