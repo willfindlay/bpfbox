@@ -18,6 +18,12 @@
     This file provides ctypes structures to match those defined in
     the BPF program.
 
+    **********************************************************************
+    **********************************************************************
+       WARNING: Keep this file in sync with bpf/policy.c at all times!
+    **********************************************************************
+    **********************************************************************
+
     2020-Jun-29  William Findlay  Created this.
 """
 
