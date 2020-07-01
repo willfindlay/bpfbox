@@ -30,7 +30,7 @@ import time
 from bpfbox.argument_parser import parse_args
 from bpfbox.bpf_program import BPFProgram
 from bpfbox.logger import BPFBoxLoggerClass
-from bpfbox.utils import get_inode_and_device
+from bpfbox.utils import get_inode_and_device, which
 from bpfbox.flags import BPFBOX_ACTION, FS_ACCESS
 from bpfbox import defs
 
@@ -111,7 +111,6 @@ def test_parent_child(bpf_program: BPFProgram, caplog):
 
 
 def test_procfs(bpf_program: BPFProgram, caplog):
-
     bpf_program.add_profile(OPEN_PATH, False)
     bpf_program.add_fs_rule(OPEN_PATH, '/tmp/bpfbox/a', FS_ACCESS.READ, BPFBOX_ACTION.TAINT)
     bpf_program.add_fs_rule(OPEN_PATH, '/proc', FS_ACCESS.EXEC)
@@ -120,3 +119,35 @@ def test_procfs(bpf_program: BPFProgram, caplog):
 
     with pytest.raises(subprocess.CalledProcessError):
         subprocess.check_call([OPEN_PATH, 'proc-1'])
+
+
+@pytest.mark.skipif(not which('exa'), reason='exa not found on system')
+def test_exa(bpf_program: BPFProgram, caplog):
+    exa = which('exa')
+    bpf_program.add_profile(exa, True)
+    bpf_program.add_fs_rule(exa, "/etc/ld.so.cache", FS_ACCESS.READ)
+    bpf_program.add_fs_rule(exa, "/usr/lib/libz.so.1", FS_ACCESS.READ)
+    bpf_program.add_fs_rule(exa, "/usr/lib/libdl.so.2", FS_ACCESS.READ)
+    bpf_program.add_fs_rule(exa, "/usr/lib/librt.so.1", FS_ACCESS.READ)
+    bpf_program.add_fs_rule( exa, "/usr/lib/libpthread.so.0", FS_ACCESS.READ)
+    bpf_program.add_fs_rule( exa, "/usr/lib/libgcc_s.so.1", FS_ACCESS.READ)
+    bpf_program.add_fs_rule(exa, "/usr/lib/libc.so.6", FS_ACCESS.READ)
+    bpf_program.add_fs_rule( exa, "/root/bpfbox/bpfbox", FS_ACCESS.READ | FS_ACCESS.EXEC,)
+    bpf_program.add_fs_rule( exa, "/usr/lib/perl5/5.30/core_perl/CORE/dquote_inline.h", FS_ACCESS.EXEC,)
+    bpf_program.add_fs_rule( exa, "/usr/lib/libnss_files-2.31.so", FS_ACCESS.EXEC | FS_ACCESS.READ,)
+    bpf_program.add_fs_rule( exa, "/etc/localtime", FS_ACCESS.READ | FS_ACCESS.EXEC,)
+    bpf_program.add_fs_rule( exa, "/usr/lib/locale/locale-archive", FS_ACCESS.READ)
+    bpf_program.add_fs_rule(exa, "/etc/nsswitch.conf", FS_ACCESS.READ)
+    bpf_program.add_fs_rule(exa, "/etc/passwd", FS_ACCESS.READ)
+    bpf_program.add_fs_rule(exa, "/var", FS_ACCESS.EXEC)
+    bpf_program.add_fs_rule(exa, "/run/nscd", FS_ACCESS.EXEC)
+    bpf_program.add_fs_rule(exa, '/proc', FS_ACCESS.EXEC)
+    bpf_program.add_fs_rule(exa, '/tmp/bpfbox', FS_ACCESS.READ)
+
+    subprocess.check_call([exa, '/tmp/bpfbox'])
+
+# /usr/bin/ls
+# "/etc/ld.so.cache"
+# "/usr/lib/libcap.so.2"
+# "/usr/lib/libc.so.6"
+# "/usr/lib/locale/locale-archive"
