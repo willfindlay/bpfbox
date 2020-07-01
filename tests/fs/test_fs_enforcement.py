@@ -129,25 +129,33 @@ def test_exa(bpf_program: BPFProgram, caplog):
     bpf_program.add_fs_rule(exa, "/usr/lib/libz.so.1", FS_ACCESS.READ)
     bpf_program.add_fs_rule(exa, "/usr/lib/libdl.so.2", FS_ACCESS.READ)
     bpf_program.add_fs_rule(exa, "/usr/lib/librt.so.1", FS_ACCESS.READ)
-    bpf_program.add_fs_rule( exa, "/usr/lib/libpthread.so.0", FS_ACCESS.READ)
-    bpf_program.add_fs_rule( exa, "/usr/lib/libgcc_s.so.1", FS_ACCESS.READ)
+    bpf_program.add_fs_rule(exa, "/usr/lib/libpthread.so.0", FS_ACCESS.READ)
+    bpf_program.add_fs_rule(exa, "/usr/lib/libgcc_s.so.1", FS_ACCESS.READ)
     bpf_program.add_fs_rule(exa, "/usr/lib/libc.so.6", FS_ACCESS.READ)
-    bpf_program.add_fs_rule( exa, "/root/bpfbox/bpfbox", FS_ACCESS.READ | FS_ACCESS.EXEC,)
-    bpf_program.add_fs_rule( exa, "/usr/lib/perl5/5.30/core_perl/CORE/dquote_inline.h", FS_ACCESS.EXEC,)
-    bpf_program.add_fs_rule( exa, "/usr/lib/libnss_files-2.31.so", FS_ACCESS.EXEC | FS_ACCESS.READ,)
-    bpf_program.add_fs_rule( exa, "/etc/localtime", FS_ACCESS.READ | FS_ACCESS.EXEC,)
-    bpf_program.add_fs_rule( exa, "/usr/lib/locale/locale-archive", FS_ACCESS.READ)
+    bpf_program.add_fs_rule(exa, "/usr/lib/perl5/5.30/core_perl/CORE/dquote_inline.h", FS_ACCESS.EXEC,)
+    bpf_program.add_fs_rule(exa, "/usr/lib/libnss_files-2.31.so", FS_ACCESS.EXEC | FS_ACCESS.READ,)
+    bpf_program.add_fs_rule(exa, "/etc/localtime", FS_ACCESS.READ | FS_ACCESS.EXEC,)
+    bpf_program.add_fs_rule(exa, "/usr/lib/locale/locale-archive", FS_ACCESS.READ)
     bpf_program.add_fs_rule(exa, "/etc/nsswitch.conf", FS_ACCESS.READ)
     bpf_program.add_fs_rule(exa, "/etc/passwd", FS_ACCESS.READ)
     bpf_program.add_fs_rule(exa, "/var", FS_ACCESS.EXEC)
     bpf_program.add_fs_rule(exa, "/run/nscd", FS_ACCESS.EXEC)
     bpf_program.add_fs_rule(exa, '/proc', FS_ACCESS.EXEC)
-    bpf_program.add_fs_rule(exa, '/tmp/bpfbox', FS_ACCESS.READ)
+    bpf_program.add_fs_rule(exa, '/tmp/bpfbox', FS_ACCESS.READ | FS_ACCESS.EXEC)
 
-    subprocess.check_call([exa, '/tmp/bpfbox'])
+    out = subprocess.check_output([exa, '/tmp/bpfbox']).decode('utf-8')
+    assert out.strip() == '\n'.join(sorted(os.listdir('/tmp/bpfbox')))
 
-# /usr/bin/ls
-# "/etc/ld.so.cache"
-# "/usr/lib/libcap.so.2"
-# "/usr/lib/libc.so.6"
-# "/usr/lib/locale/locale-archive"
+@pytest.mark.skipif(not which('ls'), reason='ls not found on system')
+def test_ls(bpf_program: BPFProgram, caplog):
+    ls = which('ls')
+    bpf_program.add_profile(ls, True)
+    bpf_program.add_fs_rule(ls, "/etc/ld.so.cache", FS_ACCESS.READ)
+    bpf_program.add_fs_rule(ls, "/usr/lib/libcap.so.2", FS_ACCESS.READ)
+    bpf_program.add_fs_rule(ls, "/usr/lib/libc.so.6", FS_ACCESS.READ)
+    bpf_program.add_fs_rule(ls, "/usr/lib/locale/locale-archive", FS_ACCESS.READ)
+    bpf_program.add_fs_rule(ls, '/proc', FS_ACCESS.EXEC)
+    bpf_program.add_fs_rule(ls, '/tmp/bpfbox', FS_ACCESS.READ)
+
+    out = subprocess.check_output([ls, '/tmp/bpfbox']).decode('utf-8')
+    assert out.strip() == '\n'.join(sorted(os.listdir('/tmp/bpfbox')))
