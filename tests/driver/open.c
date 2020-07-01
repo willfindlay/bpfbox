@@ -82,6 +82,16 @@ int main(int argc, char **argv)
         close(fd);
     }
 
+    if (!strcmp(argv[1], "simple-write-append")) {
+        fd = open_or_die("/tmp/bpfbox/a", O_WRONLY | O_APPEND);
+        close(fd);
+    }
+
+    if (!strcmp(argv[1], "simple-write-no-append")) {
+        fd = open_or_die("/tmp/bpfbox/a", O_WRONLY);
+        close(fd);
+    }
+
     if (!strcmp(argv[1], "complex")) {
         fd = open_or_die("/tmp/bpfbox/a", O_RDWR);
         close(fd);
@@ -92,7 +102,7 @@ int main(int argc, char **argv)
         execve_or_die("/tmp/bpfbox/d");
     }
 
-    if (!strcmp(argv[1], "complex-with-append")) {
+    if (!strcmp(argv[1], "complex-with-extra")) {
         fd = open_or_die("/tmp/bpfbox/a", O_RDWR);
         close(fd);
         fd = open_or_die("/tmp/bpfbox/a", O_RDONLY);

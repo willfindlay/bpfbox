@@ -61,7 +61,7 @@ BPF_RINGBUF_OUTPUT(fs_audit_events, BPFBOX_AUDIT_RINGBUF_PAGES);
 static __always_inline void audit_fs(struct bpfbox_process_t *process,
                                      enum bpfbox_action_t action,
                                      struct inode *inode,
-                                     bpfbox_access_vector_t access)
+                                     bpfbox_accesss_t access)
 {
     FILTER_AUDIT(action);
 
@@ -136,7 +136,7 @@ static __always_inline struct bpfbox_process_t *get_current_process()
 
 static __always_inline enum bpfbox_action_t policy_decision(
     struct bpfbox_process_t *process, struct bpfbox_policy_t *policy,
-    u32 access_mask)
+    u32 access)
 {
     // Set deny action based on whether or not we are enforcing
 #ifndef BPFBOX_ENFORCING
@@ -157,12 +157,12 @@ static __always_inline enum bpfbox_action_t policy_decision(
 
     // Set allow action based on whether or not we want to audit
     enum bpfbox_action_t allow_action = ACTION_ALLOW;
-    if (access_mask & policy->audit) {
+    if (access & policy->audit) {
         allow_action |= ACTION_AUDIT;
     }
 
     // Taint process if we hit a taint rule
-    if (!process->tainted && (access_mask & policy->taint)) {
+    if (!process->tainted && (access & policy->taint)) {
         process->tainted = 1;
         return allow_action | ACTION_TAINT;
     }
@@ -173,7 +173,7 @@ static __always_inline enum bpfbox_action_t policy_decision(
     }
 
     // If we are tainted, but the operation is allowed
-    if ((access_mask & policy->allow) == access_mask) {
+    if ((access & policy->allow) == access) {
         return allow_action;
     }
 
@@ -181,12 +181,36 @@ static __always_inline enum bpfbox_action_t policy_decision(
     return deny_action;
 }
 
+/* Linux access mask to bpfbox access */
+static __always_inline enum bpfbox_fs_access_t file_mask_to_access(int mask)
+{
+    enum bpfbox_fs_access_t access = 0;
+
+    if (mask & MAY_READ) {
+        access |= FS_READ;
+    }
+
+    // Appending and writing are mutually exclusive
+    if (mask & MAY_APPEND) {
+        access |= FS_APPEND;
+    } else if (mask & MAY_WRITE) {
+        access |= FS_WRITE;
+    }
+
+    if (mask & MAY_EXEC) {
+        access |= FS_EXEC;
+    }
+
+    return access;
+}
+
 /* =========================================================================
  * LSM Programs
- * ========================================================================= */
+ * =========================================================================
+ */
 
 /* A task requests access <mask> to <inode> */
-LSM_PROBE(inode_permission, struct inode *inode, int access_mask)
+LSM_PROBE(inode_permission, struct inode *inode, int mask)
 {
     struct bpfbox_process_t *process = get_current_process();
     if (!process) {
@@ -201,10 +225,10 @@ LSM_PROBE(inode_permission, struct inode *inode, int access_mask)
 
     struct bpfbox_policy_t *policy = fs_policy.lookup(&key);
 
-    access_mask &= (MAY_READ | MAY_WRITE | MAY_APPEND | MAY_EXEC);
+    enum bpfbox_fs_access_t access = file_mask_to_access(mask);
 
-    enum bpfbox_action_t action = policy_decision(process, policy, access_mask);
-    audit_fs(process, action, inode, access_mask);
+    enum bpfbox_action_t action = policy_decision(process, policy, access);
+    audit_fs(process, action, inode, access);
 
     return action & ACTION_DENY ? -EPERM : 0;
 }
