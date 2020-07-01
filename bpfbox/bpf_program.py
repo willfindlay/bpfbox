@@ -120,48 +120,6 @@ class BPFProgram:
         self._register_uprobes()
         self._generate_policy()
 
-        # FIXME temporary testing
-        self.add_profile('/bin/exa', taint_on_exec=False)
-        self.add_fs_rule('/bin/exa', "/etc/ld.so.cache", FS_ACCESS.MAY_READ)
-        self.add_fs_rule('/bin/exa', "/usr/lib/libz.so.1", FS_ACCESS.MAY_READ)
-        self.add_fs_rule('/bin/exa', "/usr/lib/libdl.so.2", FS_ACCESS.MAY_READ)
-        self.add_fs_rule('/bin/exa', "/usr/lib/librt.so.1", FS_ACCESS.MAY_READ)
-        self.add_fs_rule(
-            '/bin/exa', "/usr/lib/libpthread.so.0", FS_ACCESS.MAY_READ
-        )
-        self.add_fs_rule(
-            '/bin/exa', "/usr/lib/libgcc_s.so.1", FS_ACCESS.MAY_READ
-        )
-        self.add_fs_rule('/bin/exa', "/usr/lib/libc.so.6", FS_ACCESS.MAY_READ)
-        self.add_fs_rule('/bin/exa', "/proc/self/maps", FS_ACCESS.MAY_READ)
-        self.add_fs_rule(
-            '/bin/exa',
-            "/root/bpfbox/bpfbox",
-            FS_ACCESS.MAY_READ | FS_ACCESS.MAY_EXEC,
-        )
-        self.add_fs_rule(
-            '/bin/exa',
-            "/usr/lib/perl5/5.30/core_perl/CORE/dquote_inline.h",
-            FS_ACCESS.MAY_EXEC,
-        )
-        self.add_fs_rule(
-            '/bin/exa',
-            "/usr/lib/libnss_files-2.31.so",
-            FS_ACCESS.MAY_EXEC | FS_ACCESS.MAY_READ,
-        )
-        self.add_fs_rule(
-            '/bin/exa',
-            "/etc/localtime",
-            FS_ACCESS.MAY_READ | FS_ACCESS.MAY_EXEC,
-        )
-        self.add_fs_rule(
-            '/bin/exa', "/usr/lib/locale/locale-archive", FS_ACCESS.MAY_READ
-        )
-        self.add_fs_rule('/bin/exa', "/etc/nsswitch.conf", FS_ACCESS.MAY_READ)
-        self.add_fs_rule('/bin/exa', "/etc/passwd", FS_ACCESS.MAY_READ)
-        self.add_fs_rule('/bin/exa', "/var", FS_ACCESS.MAY_EXEC)
-        self.add_fs_rule('/bin/exa', "/run/nscd", FS_ACCESS.MAY_EXEC)
-
         # Pin maps
         # if not maps_pinned:
         #    logger.info('Pinnings maps...')
@@ -349,7 +307,7 @@ class BPFProgram:
             except FileNotFoundError:
                 logger.warning('add_fs_rule: Unable to find file %s' % (head))
                 continue
-            access_mask = FS_ACCESS.MAY_EXEC
+            access_mask = FS_ACCESS.EXEC
             self._add_fs_rule(
                 profile_key, st_ino, st_dev, access_mask, BPFBOX_ACTION.ALLOW
             )

@@ -60,12 +60,12 @@ BPF_HASH(profiles, u64, struct bpfbox_profile_t, BPFBOX_MAX_POLICY_SIZE);
 
 /* Each action represents a BPFBox policy decision. */
 enum bpfbox_action_t {
-    ACTION_NONE = 0x0,
-    ACTION_ALLOW = 0x1,
-    ACTION_AUDIT = 0x2,
-    ACTION_TAINT = 0x4,
-    ACTION_DENY = 0x8,
-    ACTION_COMPLAIN = 0x10,
+    ACTION_NONE = 0x00000000,
+    ACTION_ALLOW = 0x00000001,
+    ACTION_AUDIT = 0x00000002,
+    ACTION_TAINT = 0x00000004,
+    ACTION_DENY = 0x00000008,
+    ACTION_COMPLAIN = 0x00000010,
 };
 
 /* <allow> and <taint> are bitmasks that are matched against access vectors. */
@@ -140,24 +140,25 @@ static __always_inline void audit_inode(struct bpfbox_process_t *process,
     inode_audit_events.ringbuf_submit(event, 0);
 }
 
-BPF_RINGBUF_OUTPUT(network_audit_events, BPFBOX_AUDIT_RINGBUF_PAGES);
-
-struct network_audit_event_t {
-    STRUCT_AUDIT_COMMON
-};
-
-static __always_inline void audit_network(struct bpfbox_process_t *process,
-                                          enum bpfbox_action_t action)
-{
-    FILTER_AUDIT(action);
-
-    struct network_audit_event_t *event = network_audit_events.ringbuf_reserve(
-        sizeof(struct inode_audit_event_t));
-
-    DO_AUDIT_COMMON(event, process, action);
-
-    network_audit_events.ringbuf_submit(event, 0);
-}
+// BPF_RINGBUF_OUTPUT(network_audit_events, BPFBOX_AUDIT_RINGBUF_PAGES);
+//
+// struct network_audit_event_t {
+//     STRUCT_AUDIT_COMMON
+// };
+//
+// static __always_inline void audit_network(struct bpfbox_process_t *process,
+//                                           enum bpfbox_action_t action)
+// {
+//     FILTER_AUDIT(action);
+//
+//     struct network_audit_event_t *event =
+//     network_audit_events.ringbuf_reserve(
+//         sizeof(struct inode_audit_event_t));
+//
+//     DO_AUDIT_COMMON(event, process, action);
+//
+//     network_audit_events.ringbuf_submit(event, 0);
+// }
 
 /* =========================================================================
  * Helper Functions
@@ -257,6 +258,15 @@ LSM_PROBE(inode_permission, struct inode *inode, int access_mask)
     audit_inode(process, action, inode, access_mask);
 
     return action & ACTION_DENY ? -EPERM : 0;
+}
+
+/* Bookkeeping for procfs, etc. */
+LSM_PROBE(task_to_inode, struct task_struct *p, struct inode *inode)
+{
+    // TODO: set inodes for current task, perhaps inside a map-in-map?
+    // this could get messy and _quick_. maybe try to find a better solution
+
+    return 0;
 }
 
 /* =========================================================================

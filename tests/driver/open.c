@@ -27,6 +27,7 @@
 #include <string.h>
 #include <sys/stat.h>
 #include <sys/types.h>
+#include <sys/wait.h>
 #include <unistd.h>
 
 int open_or_die(const char *path, int flags)
@@ -62,26 +63,26 @@ int main(int argc, char **argv)
     // For tainting
     fd = open_or_die("/tmp/bpfbox/a", O_RDONLY);
 
-    if (!strcmp(argv[1], "1a")) {
+    if (!strcmp(argv[1], "simple-read")) {
         fd = open_or_die("/tmp/bpfbox/a", O_RDONLY);
         close(fd);
     }
 
-    if (!strcmp(argv[1], "1b")) {
+    if (!strcmp(argv[1], "simple-read-and-write")) {
         fd = open_or_die("/tmp/bpfbox/a", O_RDONLY);
         close(fd);
         fd = open_or_die("/tmp/bpfbox/a", O_WRONLY);
         close(fd);
     }
 
-    if (!strcmp(argv[1], "1c")) {
+    if (!strcmp(argv[1], "simple-read-and-readwrite")) {
         fd = open_or_die("/tmp/bpfbox/a", O_RDONLY);
         close(fd);
         fd = open_or_die("/tmp/bpfbox/a", O_RDWR);
         close(fd);
     }
 
-    if (!strcmp(argv[1], "2a")) {
+    if (!strcmp(argv[1], "complex")) {
         fd = open_or_die("/tmp/bpfbox/a", O_RDWR);
         close(fd);
         fd = open_or_die("/tmp/bpfbox/b", O_WRONLY | O_APPEND);
@@ -91,7 +92,7 @@ int main(int argc, char **argv)
         execve_or_die("/tmp/bpfbox/d");
     }
 
-    if (!strcmp(argv[1], "2b")) {
+    if (!strcmp(argv[1], "complex-with-append")) {
         fd = open_or_die("/tmp/bpfbox/a", O_RDWR);
         close(fd);
         fd = open_or_die("/tmp/bpfbox/a", O_RDONLY);
@@ -105,7 +106,7 @@ int main(int argc, char **argv)
         execve_or_die("/tmp/bpfbox/d");
     }
 
-    if (!strcmp(argv[1], "2c")) {
+    if (!strcmp(argv[1], "complex-with-invalid")) {
         fd = open_or_die("/tmp/bpfbox/a", O_RDWR);
         close(fd);
         fd = open_or_die("/tmp/bpfbox/a", O_RDONLY);
@@ -119,6 +120,38 @@ int main(int argc, char **argv)
         fd = open_or_die("/tmp/bpfbox/d", O_WRONLY);
         close(fd);
         execve_or_die("/tmp/bpfbox/d");
+    }
+
+    if (!strcmp(argv[1], "parent-child")) {
+        int pid = fork();
+
+        // Parent and child
+        fd = open_or_die("/tmp/bpfbox/a", O_RDONLY);
+        close(fd);
+        // Child only
+        if (pid) {
+            fd = open_or_die("/tmp/bpfbox/a", O_WRONLY);
+            close(fd);
+        }
+
+        // Forward child's exit status
+        int status;
+        waitpid(pid, &status, 0);
+        if (WIFEXITED(status)) {
+            exit(WEXITSTATUS(status));
+        }
+    }
+
+    if (!strcmp(argv[1], "proc-self")) {
+        fd = open_or_die("/proc/self/status", O_RDONLY);
+        char buf[16];
+        read(fd, buf, 16);
+        close(fd);
+    }
+
+    if (!strcmp(argv[1], "proc-1")) {
+        fd = open_or_die("/proc/1/status", O_RDONLY);
+        close(fd);
     }
 
     return 0;
