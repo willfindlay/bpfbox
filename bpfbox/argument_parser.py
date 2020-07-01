@@ -110,6 +110,12 @@ def parse_args(sysargs: List[str] = sys.argv[1:]) -> argparse.Namespace:
         action='store_true',
         help='Write to terminal instead of log file. Only makes sense when running with --nodaemon.',
     )
+    log_options.add_argument(
+        '--ebpf',
+        action='store_true',
+        dest='show_ebpf',
+        help=argparse.SUPPRESS,
+    )
     # Miscellaneous options
     misc_options = parser.add_argument_group('misc.')
 

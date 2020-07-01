@@ -50,11 +50,12 @@ def ringbuf_callback(bpf, map_name, infer_type=True):
 
 
 class BPFProgram:
-    def __init__(self, enforcing=True, debug=False):
+    def __init__(self, enforcing=True, debug=False, show_ebpf=False):
         self.bpf = None
         self.debug = debug
+        self.show_ebpf = show_ebpf
         self.enforcing = enforcing
-        self.profile_key_to_exe = defaultdict(lambda x: '[unknown]')
+        self.profile_key_to_exe = defaultdict(lambda: '[unknown]')
         self.have_registered_uprobes = False
 
     def do_tick(self) -> None:
@@ -114,53 +115,12 @@ class BPFProgram:
         cflags = self._set_cflags(maps_pinned)
         # Load the bpf program
         logger.info('Loading BPF program...')
-        logger.debug('BPF program source:\n%s' % (source))
+        if self.show_ebpf:
+            logger.debug('BPF program source:\n%s' % (source))
         self.bpf = BPF(text=source.encode('utf-8'), cflags=cflags)
         self._register_ring_buffers()
         self._register_uprobes()
         self._generate_policy()
-
-        # FIXME temporary testing
-        self.add_profile('/bin/exa', taint_on_exec=False)
-        self.add_fs_rule('/bin/exa', "/etc/ld.so.cache", FS_ACCESS.MAY_READ)
-        self.add_fs_rule('/bin/exa', "/usr/lib/libz.so.1", FS_ACCESS.MAY_READ)
-        self.add_fs_rule('/bin/exa', "/usr/lib/libdl.so.2", FS_ACCESS.MAY_READ)
-        self.add_fs_rule('/bin/exa', "/usr/lib/librt.so.1", FS_ACCESS.MAY_READ)
-        self.add_fs_rule(
-            '/bin/exa', "/usr/lib/libpthread.so.0", FS_ACCESS.MAY_READ
-        )
-        self.add_fs_rule(
-            '/bin/exa', "/usr/lib/libgcc_s.so.1", FS_ACCESS.MAY_READ
-        )
-        self.add_fs_rule('/bin/exa', "/usr/lib/libc.so.6", FS_ACCESS.MAY_READ)
-        self.add_fs_rule('/bin/exa', "/proc/self/maps", FS_ACCESS.MAY_READ)
-        self.add_fs_rule(
-            '/bin/exa',
-            "/root/bpfbox/bpfbox",
-            FS_ACCESS.MAY_READ | FS_ACCESS.MAY_EXEC,
-        )
-        self.add_fs_rule(
-            '/bin/exa',
-            "/usr/lib/perl5/5.30/core_perl/CORE/dquote_inline.h",
-            FS_ACCESS.MAY_EXEC,
-        )
-        self.add_fs_rule(
-            '/bin/exa',
-            "/usr/lib/libnss_files-2.31.so",
-            FS_ACCESS.MAY_EXEC | FS_ACCESS.MAY_READ,
-        )
-        self.add_fs_rule(
-            '/bin/exa',
-            "/etc/localtime",
-            FS_ACCESS.MAY_READ | FS_ACCESS.MAY_EXEC,
-        )
-        self.add_fs_rule(
-            '/bin/exa', "/usr/lib/locale/locale-archive", FS_ACCESS.MAY_READ
-        )
-        self.add_fs_rule('/bin/exa', "/etc/nsswitch.conf", FS_ACCESS.MAY_READ)
-        self.add_fs_rule('/bin/exa', "/etc/passwd", FS_ACCESS.MAY_READ)
-        self.add_fs_rule('/bin/exa', "/var", FS_ACCESS.MAY_EXEC)
-        self.add_fs_rule('/bin/exa', "/run/nscd", FS_ACCESS.MAY_EXEC)
 
         # Pin maps
         # if not maps_pinned:
@@ -195,17 +155,34 @@ class BPFProgram:
     def _register_ring_buffers(self):
         logger.info('Registering ring buffers...')
 
-        @ringbuf_callback(self.bpf, 'inode_audit_events')
-        def inode_audit_events(ctx, event, size):
+        @ringbuf_callback(self.bpf, 'fs_audit_events')
+        def fs_audit_events(ctx, event, size):
             logger.audit(
-                'ev=FS act=%-8s uid=%-4d exe=%-18s st_ino=%-8d st_dev=%-12s req=%-11s'
+                'event=FS action=%-8s uid=%-4d exe=%-18s st_ino=%-8d st_dev=%-12s access=%-11s'
                 % (
                     BPFBOX_ACTION(event.action),
                     event.uid,
                     self._format_exe(event.profile_key, event.pid),
                     event.st_ino,
                     self._format_dev(event.s_id.decode('utf-8'), event.st_dev),
-                    FS_ACCESS(event.mask),
+                    FS_ACCESS(event.access),
+                )
+            )
+
+        # Debugging below this line  ---------------------------------------
+
+        if not self.debug:
+            return
+
+        @ringbuf_callback(self.bpf, 'task_to_inode_debug_events')
+        def task_to_inode_debug_events(ctx, event, size):
+            logger.debug(
+                'task_to_inode pid=%-8d exe=%-18s st_ino=%-8d st_dev=%-12s'
+                % (
+                    event.pid,
+                    self._format_exe(event.profile_key, event.pid),
+                    event.st_ino,
+                    self._format_dev(event.s_id.decode('utf-8'), event.st_dev),
                 )
             )
 
@@ -349,7 +326,7 @@ class BPFProgram:
             except FileNotFoundError:
                 logger.warning('add_fs_rule: Unable to find file %s' % (head))
                 continue
-            access_mask = FS_ACCESS.MAY_EXEC
+            access_mask = FS_ACCESS.EXEC
             self._add_fs_rule(
                 profile_key, st_ino, st_dev, access_mask, BPFBOX_ACTION.ALLOW
             )

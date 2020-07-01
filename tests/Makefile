@@ -1,7 +1,7 @@
-PYTEST_ARGS = "-W ignore::DeprecationWarning"
+PYTEST_ARGS = -v -W ignore::DeprecationWarning
 
-.PHONY: all
-all: | driver
+.PHONY: test
+test: | driver
 	pytest $(PYTEST_ARGS)
 
 .PHONY: driver

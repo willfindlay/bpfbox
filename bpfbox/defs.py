@@ -58,7 +58,7 @@ context_mask_size = 64
 max_string_size = 128
 
 # Ringbuf sizes in pages
-audit_ringbuf_pages = 1 << 8
+audit_ringbuf_pages = 1 << 3
 
 # Size of policy maps
 # Higher values allow more policy to be defined for each category, but

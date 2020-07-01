@@ -115,23 +115,23 @@ def powerperm(ell):
     return list(perms)
 
 
-def which(binary):
-    """
-    Find a binary if it exists.
-    """
-    try:
-        w = subprocess.Popen(
-            ["which", binary], stdout=subprocess.PIPE, stderr=subprocess.PIPE
-        )
-        res = w.stdout.readlines()
-        if len(res) == 0:
-            raise Exception(f"{binary} not found")
-        return os.path.realpath(res[0].strip())
-    except Exception:
-        if os.path.isfile(binary):
-            return os.path.realpath(binary)
-        else:
-            raise Exception(f"{binary} not found")
+def which(program):
+    import os
+
+    def is_exe(fpath):
+        return os.path.isfile(fpath) and os.access(fpath, os.X_OK)
+
+    fpath, _fname = os.path.split(program)
+    if fpath:
+        if is_exe(program):
+            return program
+    else:
+        for path in os.environ["PATH"].split(os.pathsep):
+            exe_file = os.path.join(path, program)
+            if is_exe(exe_file):
+                return exe_file
+
+    return None
 
 
 @drop_privileges
@@ -140,9 +140,8 @@ def run_binary(args_str):
     Drop privileges and run a binary if it exists.
     """
     args = args_str.split()
-    try:
-        binary = which(args[0])
-    except Exception:
+    binary = which(args[0])
+    if not binary:
         return -1
     pid = os.fork()
     if pid == 0:
