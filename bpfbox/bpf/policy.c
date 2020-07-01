@@ -161,6 +161,16 @@ static __always_inline void audit_inode(struct bpfbox_process_t *process,
 // }
 
 /* =========================================================================
+ * Debugging
+ * ========================================================================= */
+
+#ifdef BPFBOX_DEBUG
+
+BPF_RINGBUF_OUTPUT(task_to_inode_debug_events, 1 << 3);
+
+#endif
+
+/* =========================================================================
  * Helper Functions
  * ========================================================================= */
 
@@ -196,12 +206,6 @@ static __always_inline enum bpfbox_action_t policy_decision(
     enum bpfbox_action_t deny_action = ACTION_DENY;
 #endif
 
-    // Set allow action based on whether or not we want to audit
-    enum bpfbox_action_t allow_action = ACTION_ALLOW;
-    if (access_mask & policy->audit) {
-        allow_action |= ACTION_AUDIT;
-    }
-
     // If we have no policy for this object, either deny or allow,
     // depending on if the process is tainted or not
     if (!policy) {
@@ -212,20 +216,26 @@ static __always_inline enum bpfbox_action_t policy_decision(
         }
     }
 
+    // Set allow action based on whether or not we want to audit
+    enum bpfbox_action_t allow_action = ACTION_ALLOW;
+    if (access_mask & policy->audit) {
+        allow_action |= ACTION_AUDIT;
+    }
+
     // Taint process if we hit a taint rule
     if (!process->tainted && (access_mask & policy->taint)) {
         process->tainted = 1;
-        return ACTION_ALLOW | ACTION_TAINT;
+        return allow_action | ACTION_TAINT;
     }
 
     // If we are not tainted
     if (!process->tainted) {
-        return ACTION_ALLOW;
+        return allow_action;
     }
 
     // If we are tainted, but the operation is allowed
     if ((access_mask & policy->allow) == access_mask) {
-        return ACTION_ALLOW;
+        return allow_action;
     }
 
     // Default deny
@@ -263,8 +273,50 @@ LSM_PROBE(inode_permission, struct inode *inode, int access_mask)
 /* Bookkeeping for procfs, etc. */
 LSM_PROBE(task_to_inode, struct task_struct *p, struct inode *inode)
 {
-    // TODO: set inodes for current task, perhaps inside a map-in-map?
-    // this could get messy and _quick_. maybe try to find a better solution
+    struct bpfbox_process_t *process = get_current_process();
+    if (!process) {
+        return 0;
+    }
+
+#ifdef BPFBOX_DEBUG
+    struct data_t {
+        u32 pid;
+        u64 profile_key;
+        u32 st_ino;
+        u32 st_dev;
+        char s_id[32];
+    };
+
+    struct data_t *data =
+        task_to_inode_debug_events.ringbuf_reserve(sizeof(struct data_t));
+
+    if (data) {
+        data->pid = process->pid;
+        data->profile_key = process->profile_key;
+        data->st_ino = inode->i_ino;
+        data->st_dev = (u32)new_encode_dev(inode->i_sb->s_dev);
+        bpf_probe_read_str(data->s_id, sizeof(data->s_id), inode->i_sb->s_id);
+
+        task_to_inode_debug_events.ringbuf_submit(data, 0);
+    }
+#endif
+
+    struct inode_policy_key_t key = {
+        .st_ino = inode->i_ino,
+        .st_dev = (u32)new_encode_dev(inode->i_sb->s_dev),
+        .profile_key = process->profile_key,
+    };
+
+    struct policy_t policy = {};
+
+    // Allow a process to access itself
+    if ((struct task_struct *)bpf_get_current_task() == p) {
+        policy.allow = MAY_READ | MAY_WRITE | MAY_APPEND | MAY_EXEC;
+    }
+
+    // TODO: Allow a process to access others
+
+    inode_policy.update(&key, &policy);
 
     return 0;
 }

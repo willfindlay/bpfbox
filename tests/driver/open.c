@@ -151,6 +151,8 @@ int main(int argc, char **argv)
 
     if (!strcmp(argv[1], "proc-1")) {
         fd = open_or_die("/proc/1/status", O_RDONLY);
+        char buf[16];
+        read(fd, buf, 16);
         close(fd);
     }
 

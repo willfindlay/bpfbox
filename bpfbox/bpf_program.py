@@ -50,11 +50,12 @@ def ringbuf_callback(bpf, map_name, infer_type=True):
 
 
 class BPFProgram:
-    def __init__(self, enforcing=True, debug=False):
+    def __init__(self, enforcing=True, debug=False, show_ebpf=False):
         self.bpf = None
         self.debug = debug
+        self.show_ebpf = show_ebpf
         self.enforcing = enforcing
-        self.profile_key_to_exe = defaultdict(lambda x: '[unknown]')
+        self.profile_key_to_exe = defaultdict(lambda: '[unknown]')
         self.have_registered_uprobes = False
 
     def do_tick(self) -> None:
@@ -114,7 +115,8 @@ class BPFProgram:
         cflags = self._set_cflags(maps_pinned)
         # Load the bpf program
         logger.info('Loading BPF program...')
-        logger.debug('BPF program source:\n%s' % (source))
+        if self.show_ebpf:
+            logger.debug('BPF program source:\n%s' % (source))
         self.bpf = BPF(text=source.encode('utf-8'), cflags=cflags)
         self._register_ring_buffers()
         self._register_uprobes()
@@ -156,7 +158,7 @@ class BPFProgram:
         @ringbuf_callback(self.bpf, 'inode_audit_events')
         def inode_audit_events(ctx, event, size):
             logger.audit(
-                'ev=FS act=%-8s uid=%-4d exe=%-18s st_ino=%-8d st_dev=%-12s req=%-11s'
+                'event=FS action=%-8s uid=%-4d exe=%-18s st_ino=%-8d st_dev=%-12s access=%-11s'
                 % (
                     BPFBOX_ACTION(event.action),
                     event.uid,
@@ -164,6 +166,23 @@ class BPFProgram:
                     event.st_ino,
                     self._format_dev(event.s_id.decode('utf-8'), event.st_dev),
                     FS_ACCESS(event.mask),
+                )
+            )
+
+        # Debugging below this line  ---------------------------------------
+
+        if not self.debug:
+            return
+
+        @ringbuf_callback(self.bpf, 'task_to_inode_debug_events')
+        def task_to_inode_debug_events(ctx, event, size):
+            logger.debug(
+                'task_to_inode pid=%-8d exe=%-18s st_ino=%-8d st_dev=%-12s'
+                % (
+                    event.pid,
+                    self._format_exe(event.profile_key, event.pid),
+                    event.st_ino,
+                    self._format_dev(event.s_id.decode('utf-8'), event.st_dev),
                 )
             )
 

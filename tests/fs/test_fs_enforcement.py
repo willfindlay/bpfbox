@@ -110,7 +110,6 @@ def test_parent_child(bpf_program: BPFProgram, caplog):
         subprocess.check_call([OPEN_PATH, 'parent-child'])
 
 
-@pytest.mark.xfail(reason='Not implemented')
 def test_procfs(bpf_program: BPFProgram, caplog):
 
     bpf_program.add_profile(OPEN_PATH, False)
@@ -120,4 +119,4 @@ def test_procfs(bpf_program: BPFProgram, caplog):
     subprocess.check_call([OPEN_PATH, 'proc-self'])
 
     with pytest.raises(subprocess.CalledProcessError):
-        subprocess.check_call([OPEN_PATH, 'parent-1'])
+        subprocess.check_call([OPEN_PATH, 'proc-1'])
