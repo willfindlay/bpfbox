@@ -53,6 +53,7 @@ def bpf_program(caplog):
     yield b
 
     # Clean up BPF program
+    b.bpf.ring_buffer_consume()
     b.cleanup()
 
 
@@ -101,4 +102,20 @@ def test_fs_allow_read_write(bpf_program: BPFProgram, caplog):
     subprocess.check_call([OPEN_PATH, '1b'])
 
     subprocess.check_call([OPEN_PATH, '1c'])
+
+
+def test_fs_complex_policy(bpf_program: BPFProgram, caplog):
+    bpf_program.add_profile(OPEN_PATH, False)
+    bpf_program.add_fs_rule(OPEN_PATH, '/tmp/bpfbox/a', FS_ACCESS.MAY_READ, BPFBOX_ACTION.TAINT)
+    bpf_program.add_fs_rule(OPEN_PATH, '/tmp/bpfbox/a', FS_ACCESS.MAY_READ | FS_ACCESS.MAY_WRITE)
+    bpf_program.add_fs_rule(OPEN_PATH, '/tmp/bpfbox/b', FS_ACCESS.MAY_WRITE | FS_ACCESS.MAY_APPEND)
+    bpf_program.add_fs_rule(OPEN_PATH, '/tmp/bpfbox/c', FS_ACCESS.MAY_READ)
+    bpf_program.add_fs_rule(OPEN_PATH, '/tmp/bpfbox/d', FS_ACCESS.MAY_EXEC)
+
+    subprocess.check_call([OPEN_PATH, '2a'])
+
+    subprocess.check_call([OPEN_PATH, '2b'])
+
+    with pytest.raises(subprocess.CalledProcessError):
+        subprocess.check_call([OPEN_PATH, '2c'])
 

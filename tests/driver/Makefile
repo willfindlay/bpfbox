@@ -20,6 +20,7 @@ testfiles:
 	touch $(TESTFILESDIR)/b
 	touch $(TESTFILESDIR)/c
 	touch $(TESTFILESDIR)/d
+	chmod +x $(TESTFILESDIR)/d
 
 open: open.c | testfiles
 	$(CC) $(CFLAGS) $(LDFLAGS) -o open open.c

@@ -20,6 +20,7 @@
  *  2020-Jun-30  William Findlay  Created this.
  */
 
+#include <errno.h>
 #include <fcntl.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -32,7 +33,7 @@ int open_or_die(const char *path, int flags)
 {
     int rc = open(path, flags);
 
-    if (rc < 0) {
+    if (rc < 0 && errno == EPERM) {
         fprintf(stderr, "open(%s, %d) failed with %d\n", path, flags, rc);
         exit(1);
     }
@@ -40,12 +41,11 @@ int open_or_die(const char *path, int flags)
     return rc;
 }
 
-// TODO: move to exec.c
-void execve_or_die(const char *path, char **argv, char **envp)
+void execve_or_die(const char *path)
 {
-    int rc = execve(path, argv, envp);
+    int rc = execve(path, NULL, NULL);
 
-    if (rc < 0) {
+    if (rc < 0 && errno == EPERM) {
         fprintf(stderr, "execve(%s) failed with %d\n", path, rc);
         exit(1);
     }
@@ -79,6 +79,46 @@ int main(int argc, char **argv)
         close(fd);
         fd = open_or_die("/tmp/bpfbox/a", O_RDWR);
         close(fd);
+    }
+
+    if (!strcmp(argv[1], "2a")) {
+        fd = open_or_die("/tmp/bpfbox/a", O_RDWR);
+        close(fd);
+        fd = open_or_die("/tmp/bpfbox/b", O_WRONLY | O_APPEND);
+        close(fd);
+        fd = open_or_die("/tmp/bpfbox/c", O_RDONLY);
+        close(fd);
+        execve_or_die("/tmp/bpfbox/d");
+    }
+
+    if (!strcmp(argv[1], "2b")) {
+        fd = open_or_die("/tmp/bpfbox/a", O_RDWR);
+        close(fd);
+        fd = open_or_die("/tmp/bpfbox/a", O_RDONLY);
+        close(fd);
+        fd = open_or_die("/tmp/bpfbox/a", O_WRONLY);
+        close(fd);
+        fd = open_or_die("/tmp/bpfbox/b", O_WRONLY | O_APPEND);
+        close(fd);
+        fd = open_or_die("/tmp/bpfbox/c", O_RDONLY);
+        close(fd);
+        execve_or_die("/tmp/bpfbox/d");
+    }
+
+    if (!strcmp(argv[1], "2c")) {
+        fd = open_or_die("/tmp/bpfbox/a", O_RDWR);
+        close(fd);
+        fd = open_or_die("/tmp/bpfbox/a", O_RDONLY);
+        close(fd);
+        fd = open_or_die("/tmp/bpfbox/a", O_WRONLY);
+        close(fd);
+        fd = open_or_die("/tmp/bpfbox/b", O_WRONLY | O_APPEND);
+        close(fd);
+        fd = open_or_die("/tmp/bpfbox/c", O_RDONLY);
+        close(fd);
+        fd = open_or_die("/tmp/bpfbox/d", O_WRONLY);
+        close(fd);
+        execve_or_die("/tmp/bpfbox/d");
     }
 
     return 0;
