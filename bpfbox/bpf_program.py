@@ -155,8 +155,8 @@ class BPFProgram:
     def _register_ring_buffers(self):
         logger.info('Registering ring buffers...')
 
-        @ringbuf_callback(self.bpf, 'inode_audit_events')
-        def inode_audit_events(ctx, event, size):
+        @ringbuf_callback(self.bpf, 'fs_audit_events')
+        def fs_audit_events(ctx, event, size):
             logger.audit(
                 'event=FS action=%-8s uid=%-4d exe=%-18s st_ino=%-8d st_dev=%-12s access=%-11s'
                 % (
@@ -165,7 +165,7 @@ class BPFProgram:
                     self._format_exe(event.profile_key, event.pid),
                     event.st_ino,
                     self._format_dev(event.s_id.decode('utf-8'), event.st_dev),
-                    FS_ACCESS(event.mask),
+                    FS_ACCESS(event.access),
                 )
             )
 
