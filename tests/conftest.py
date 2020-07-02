@@ -24,6 +24,11 @@ def bpf_program(caplog):
 
     yield b
 
-    # Clean up BPF program
     b.bpf.ring_buffer_consume()
-    b._soft_cleanup()
+
+    # Clear all maps
+    b.bpf['processes'].clear()
+    b.bpf['profiles'].clear()
+    b.bpf['fs_policy'].clear()
+    b.bpf['procfs_policy'].clear()
+    # IMPORTANT NOTE: remember to put new maps here
