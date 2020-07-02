@@ -31,7 +31,7 @@ from bcc import BPF
 from bpfbox import defs
 from bpfbox.logger import get_logger
 from bpfbox.flags import BPFBOX_ACTION, FS_ACCESS
-from bpfbox.utils import calculate_profile_key, get_inode_and_device
+from bpfbox.utils import calculate_profile_key, get_inode_and_device, which
 from bpfbox.libbpfbox import lib, register_uprobes
 
 logger = get_logger()
