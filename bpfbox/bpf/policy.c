@@ -52,6 +52,9 @@ BPF_HASH(profiles, u64, struct bpfbox_profile_t, BPFBOX_MAX_POLICY_SIZE);
 BPF_HASH(fs_policy, struct bpfbox_fs_policy_key_t, struct bpfbox_policy_t,
          BPFBOX_MAX_POLICY_SIZE);
 
+BPF_HASH(procfs_policy, struct bpfbox_procfs_policy_key_t,
+         struct bpfbox_policy_t, BPFBOX_MAX_POLICY_SIZE);
+
 /* =========================================================================
  * Auditing
  * ========================================================================= */
@@ -206,8 +209,7 @@ static __always_inline enum bpfbox_fs_access_t file_mask_to_access(int mask)
 
 /* =========================================================================
  * LSM Programs
- * =========================================================================
- */
+ * ========================================================================= */
 
 /* A task requests access <mask> to <inode> */
 LSM_PROBE(inode_permission, struct inode *inode, int mask)
@@ -275,9 +277,32 @@ LSM_PROBE(task_to_inode, struct task_struct *target, struct inode *inode)
     // Allow a process to access itself
     if (process->tgid == target->tgid) {
         policy.allow = MAY_READ | MAY_WRITE | MAY_APPEND | MAY_EXEC;
+        fs_policy.update(&key, &policy);
+        return 0;
     }
 
-    // TODO: Allow a process to access others
+    // Look up target process
+    u32 target_pid = target->pid;
+    struct bpfbox_process_t *other_process = processes.lookup(&target_pid);
+    if (!other_process) {
+        return 0;
+    }
+
+    struct bpfbox_procfs_policy_key_t pfs_key = {
+        .subject_profile_key = process->profile_key,
+        .object_profile_key = other_process->profile_key,
+    };
+
+    // Look up procfs policy from subject to object
+    struct bpfbox_policy_t *pfs_policy = procfs_policy.lookup(&pfs_key);
+    if (!pfs_policy) {
+        return 0;
+    }
+
+    // Set fs policy according to procfs policy
+    policy.allow = pfs_policy->allow;
+    policy.taint = pfs_policy->taint;
+    policy.audit = pfs_policy->audit;
 
     fs_policy.update(&key, &policy);
 
@@ -429,6 +454,67 @@ int add_fs_rule(struct pt_regs *ctx)
 
     if (action & ACTION_AUDIT) {
         policy->audit |= access_mask;
+    }
+
+    return 0;
+}
+
+int add_procfs_rule(struct pt_regs *ctx)
+{
+    u64 subject_profile_key = PT_REGS_PARM1(ctx);
+    u64 object_profile_key = PT_REGS_PARM2(ctx);
+    u32 access = PT_REGS_PARM3(ctx);
+    enum bpfbox_action_t action = PT_REGS_PARM4(ctx);
+
+    if (action & (ACTION_DENY | ACTION_COMPLAIN)) {
+        // TODO log error
+        return 1;
+    }
+
+    if (!(action & (ACTION_ALLOW | ACTION_AUDIT | ACTION_TAINT))) {
+        // TODO log error
+        return 1;
+    }
+
+    struct bpfbox_profile_t *profile = profiles.lookup(&subject_profile_key);
+    if (!profile) {
+        // TODO log error
+        return 1;
+    }
+
+    // Create object profile if it does not exist
+    struct bpfbox_profile_t _profile_init = {
+        .taint_on_exec = 0,
+    };
+    struct bpfbox_profile_t *object_profile =
+        profiles.lookup_or_try_init(&object_profile_key, &_profile_init);
+    if (!object_profile) {
+        // TODO log error
+        return 1;
+    }
+
+    struct bpfbox_procfs_policy_key_t key = {};
+    key.subject_profile_key = subject_profile_key;
+    key.object_profile_key = object_profile_key;
+
+    struct bpfbox_policy_t _init = {};
+    struct bpfbox_policy_t *policy =
+        procfs_policy.lookup_or_try_init(&key, &_init);
+    if (!policy) {
+        // TODO log error
+        return 1;
+    }
+
+    if (action & ACTION_TAINT) {
+        policy->taint |= access;
+    }
+
+    if (action & ACTION_ALLOW) {
+        policy->allow |= access;
+    }
+
+    if (action & ACTION_AUDIT) {
+        policy->audit |= access;
     }
 
     return 0;

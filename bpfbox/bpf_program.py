@@ -259,8 +259,8 @@ class BPFProgram:
         # Dump profiles TODO
 
         # Dump processes TODO
-        #logger.debug('Dumping processes...')
-        #for key, process in self.bpf[b'processes'].iteritems():
+        # logger.debug('Dumping processes...')
+        # for key, process in self.bpf[b'processes'].iteritems():
         #    logger.debug(key)
 
     def _add_profile(self, profile_key: int, taint_on_exec: int) -> int:
@@ -332,3 +332,34 @@ class BPFProgram:
             )
             if not tail:
                 break
+
+    def _add_procfs_rule(
+        self,
+        subject_profile_key: int,
+        object_profile_key: int,
+        access: FS_ACCESS,
+        action: BPFBOX_ACTION,
+    ) -> int:
+        assert self.have_registered_uprobes
+        if not (action & BPFBOX_ACTION.DENY | BPFBOX_ACTION.COMPLAIN):
+            logger.error(
+                '_add_procfs_rule: Action must be one of ALLOW, TAINT, or AUDIT'
+            )
+            return 1
+        lib.add_procfs_rule(
+            subject_profile_key, object_profile_key, access.value, action.value
+        )
+        return 0
+
+    def add_procfs_rule(
+        self,
+        subject_exe: str,
+        object_exe: str,
+        access: FS_ACCESS,
+        action: BPFBOX_ACTION = BPFBOX_ACTION.ALLOW,
+    ):
+        subject_profile_key = calculate_profile_key(subject_exe)
+        object_profile_key = calculate_profile_key(object_exe)
+        self._add_procfs_rule(
+            subject_profile_key, object_profile_key, access, action
+        )

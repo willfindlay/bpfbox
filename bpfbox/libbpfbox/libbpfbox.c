@@ -34,3 +34,7 @@ void add_profile(unsigned long long profile_key, unsigned char taint_on_exec){};
 void add_fs_rule(unsigned long long profile_key, unsigned long st_ino,
                  unsigned long st_dev, unsigned long access_mask,
                  unsigned int action){};
+
+void add_procfs_rule(unsigned long long subject_profile_key,
+                     unsigned long long object_profile_key,
+                     unsigned long access, unsigned int action){};

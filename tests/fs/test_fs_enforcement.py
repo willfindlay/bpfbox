@@ -153,6 +153,22 @@ def test_procfs(bpf_program: BPFProgram, caplog):
         subprocess.check_call([OPEN_PATH, 'proc-1'])
 
 
+@pytest.mark.skipif(not which('sleep'), reason='sleep not found on system')
+def test_procfs_other_process(bpf_program: BPFProgram, caplog):
+    sleep_path = which('sleep')
+    bpf_program.add_profile(OPEN_PATH, False)
+    bpf_program.add_fs_rule(OPEN_PATH, '/tmp/bpfbox/a', FS_ACCESS.READ, BPFBOX_ACTION.TAINT)
+    bpf_program.add_fs_rule(OPEN_PATH, '/proc', FS_ACCESS.EXEC)
+    bpf_program.add_procfs_rule(OPEN_PATH, sleep_path, FS_ACCESS.READ)
+
+    subprocess.check_call([OPEN_PATH, 'proc-self'])
+
+    # for some reason Popen's pid is always off by 1
+    sleep_pid = subprocess.Popen([sleep_path, '10']).pid + 1
+
+    subprocess.check_call([OPEN_PATH, 'proc-sleep', str(sleep_pid)])
+
+
 @pytest.mark.skipif(not which('exa'), reason='exa not found on system')
 def test_exa(bpf_program: BPFProgram, caplog):
     exa = which('exa')

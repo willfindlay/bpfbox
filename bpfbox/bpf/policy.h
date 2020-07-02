@@ -81,6 +81,12 @@ struct bpfbox_fs_policy_key_t {
     u64 profile_key;
 };
 
+/* maps subject profile to object profile. */
+struct bpfbox_procfs_policy_key_t {
+    u64 subject_profile_key;
+    u64 object_profile_key;
+};
+
 /* =========================================================================
  * Audit Data Structures
  * ========================================================================= */

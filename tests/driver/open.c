@@ -162,5 +162,13 @@ int main(int argc, char **argv)
         close(fd);
     }
 
+    if (!strcmp(argv[1], "proc-sleep") && argc > 2) {
+        int sleep_pid = atoi(argv[2]);
+        char sleep_path[256];
+        sprintf(sleep_path, "/proc/%d/status", sleep_pid);
+        fd = open_or_die(sleep_path, O_RDONLY);
+        close(fd);
+    }
+
     return 0;
 }
