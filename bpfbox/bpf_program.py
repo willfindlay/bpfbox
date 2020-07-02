@@ -146,6 +146,13 @@ class BPFProgram:
         except AttributeError:
             logger.warning("Unable to properly clean up BPF program")
 
+    def _soft_cleanup(self) -> None:
+        self.bpf['processes'].clear()
+        self.bpf['profiles'].clear()
+        self.bpf['fs_policy'].clear()
+        self.bpf['procfs_policy'].clear()
+        # IMPORTANT NOTE: remember to put new maps here
+
     def _format_exe(self, profile_key, pid):
         return '%s (%d)' % (self.profile_key_to_exe[profile_key], pid)
 

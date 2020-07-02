@@ -235,7 +235,7 @@ LSM_PROBE(inode_permission, struct inode *inode, int mask)
     return action & ACTION_DENY ? -EPERM : 0;
 }
 
-LSM_PROBE(inode_setattr, struct dentry *dentry, struct iattr *attr)
+LSM_PROBE(inode_setattr, struct dentry *dentry)
 {
     struct bpfbox_process_t *process = get_current_process();
     if (!process) {
@@ -277,6 +277,98 @@ LSM_PROBE(inode_getattr, struct path *path)
 
     enum bpfbox_action_t action = policy_decision(process, policy, FS_GETATTR);
     audit_fs(process, action, inode, FS_GETATTR);
+
+    return action & ACTION_DENY ? -EPERM : 0;
+}
+
+LSM_PROBE(inode_setxattr, struct dentry *dentry)
+{
+    struct bpfbox_process_t *process = get_current_process();
+    if (!process) {
+        return 0;
+    }
+
+    struct inode *inode = dentry->d_inode;
+
+    struct bpfbox_fs_policy_key_t key = {
+        .st_ino = inode->i_ino,
+        .st_dev = (u32)new_encode_dev(inode->i_sb->s_dev),
+        .profile_key = process->profile_key,
+    };
+
+    struct bpfbox_policy_t *policy = fs_policy.lookup(&key);
+
+    enum bpfbox_action_t action = policy_decision(process, policy, FS_SETATTR);
+    audit_fs(process, action, inode, FS_SETATTR);
+
+    return action & ACTION_DENY ? -EPERM : 0;
+}
+
+LSM_PROBE(inode_getxattr, struct dentry *dentry)
+{
+    struct bpfbox_process_t *process = get_current_process();
+    if (!process) {
+        return 0;
+    }
+
+    struct inode *inode = dentry->d_inode;
+
+    struct bpfbox_fs_policy_key_t key = {
+        .st_ino = inode->i_ino,
+        .st_dev = (u32)new_encode_dev(inode->i_sb->s_dev),
+        .profile_key = process->profile_key,
+    };
+
+    struct bpfbox_policy_t *policy = fs_policy.lookup(&key);
+
+    enum bpfbox_action_t action = policy_decision(process, policy, FS_GETATTR);
+    audit_fs(process, action, inode, FS_GETATTR);
+
+    return action & ACTION_DENY ? -EPERM : 0;
+}
+
+LSM_PROBE(inode_listxattr, struct dentry *dentry)
+{
+    struct bpfbox_process_t *process = get_current_process();
+    if (!process) {
+        return 0;
+    }
+
+    struct inode *inode = dentry->d_inode;
+
+    struct bpfbox_fs_policy_key_t key = {
+        .st_ino = inode->i_ino,
+        .st_dev = (u32)new_encode_dev(inode->i_sb->s_dev),
+        .profile_key = process->profile_key,
+    };
+
+    struct bpfbox_policy_t *policy = fs_policy.lookup(&key);
+
+    enum bpfbox_action_t action = policy_decision(process, policy, FS_GETATTR);
+    audit_fs(process, action, inode, FS_GETATTR);
+
+    return action & ACTION_DENY ? -EPERM : 0;
+}
+
+LSM_PROBE(inode_removexattr, struct dentry *dentry)
+{
+    struct bpfbox_process_t *process = get_current_process();
+    if (!process) {
+        return 0;
+    }
+
+    struct inode *inode = dentry->d_inode;
+
+    struct bpfbox_fs_policy_key_t key = {
+        .st_ino = inode->i_ino,
+        .st_dev = (u32)new_encode_dev(inode->i_sb->s_dev),
+        .profile_key = process->profile_key,
+    };
+
+    struct bpfbox_policy_t *policy = fs_policy.lookup(&key);
+
+    enum bpfbox_action_t action = policy_decision(process, policy, FS_SETATTR);
+    audit_fs(process, action, inode, FS_SETATTR);
 
     return action & ACTION_DENY ? -EPERM : 0;
 }
