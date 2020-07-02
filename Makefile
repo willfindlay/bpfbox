@@ -14,5 +14,5 @@ libbpfbox:
 	$(MAKE) -C bpfbox/libbpfbox
 
 .PHONY: test
-test:
+test: libbpfbox
 	$(MAKE) -C tests

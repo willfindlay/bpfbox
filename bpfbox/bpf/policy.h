@@ -72,6 +72,8 @@ enum bpfbox_fs_access_t {
     FS_WRITE = 0x00000002,
     FS_APPEND = 0x00000004,
     FS_EXEC = 0x00000008,
+    FS_SETATTR = 0x00000010,
+    FS_GETATTR = 0x00000020,
 };
 
 /* uniquely computes an (inode, profile) pair. */
@@ -79,6 +81,12 @@ struct bpfbox_fs_policy_key_t {
     u32 st_ino;
     u32 st_dev;
     u64 profile_key;
+};
+
+/* maps subject profile to object profile. */
+struct bpfbox_procfs_policy_key_t {
+    u64 subject_profile_key;
+    u64 object_profile_key;
 };
 
 /* =========================================================================

@@ -153,27 +153,64 @@ def test_procfs(bpf_program: BPFProgram, caplog):
         subprocess.check_call([OPEN_PATH, 'proc-1'])
 
 
+def test_chown_allowed(bpf_program: BPFProgram, caplog):
+    bpf_program.add_profile(OPEN_PATH, False)
+    bpf_program.add_fs_rule(OPEN_PATH, '/tmp/bpfbox/a', FS_ACCESS.READ, BPFBOX_ACTION.TAINT)
+    bpf_program.add_fs_rule(OPEN_PATH, '/tmp/bpfbox/a', FS_ACCESS.READ | FS_ACCESS.SETATTR)
+
+    subprocess.check_call([OPEN_PATH, 'chown-a'])
+
+
+def test_chown_disallowed(bpf_program: BPFProgram, caplog):
+    bpf_program.add_profile(OPEN_PATH, False)
+    bpf_program.add_fs_rule(OPEN_PATH, '/tmp/bpfbox/a', FS_ACCESS.READ, BPFBOX_ACTION.TAINT)
+    bpf_program.add_fs_rule(OPEN_PATH, '/tmp/bpfbox/a', FS_ACCESS.READ)
+
+    with pytest.raises(subprocess.CalledProcessError):
+        subprocess.check_call([OPEN_PATH, 'chown-a'])
+
+
+@pytest.mark.skipif(not which('sleep'), reason='sleep not found on system')
+def test_procfs_other_process(bpf_program: BPFProgram, caplog):
+    sleep_path = which('sleep')
+    bpf_program.add_profile(OPEN_PATH, False)
+    bpf_program.add_fs_rule(OPEN_PATH, '/tmp/bpfbox/a', FS_ACCESS.READ, BPFBOX_ACTION.TAINT)
+    bpf_program.add_fs_rule(OPEN_PATH, '/proc', FS_ACCESS.EXEC)
+    bpf_program.add_procfs_rule(OPEN_PATH, sleep_path, FS_ACCESS.READ)
+
+    subprocess.check_call([OPEN_PATH, 'proc-self'])
+
+    # for some reason Popen's pid is always off by 1
+    sleep_pid = subprocess.Popen([sleep_path, '10']).pid + 1
+
+    subprocess.check_call([OPEN_PATH, 'proc-sleep', str(sleep_pid)])
+
+
 @pytest.mark.skipif(not which('exa'), reason='exa not found on system')
 def test_exa(bpf_program: BPFProgram, caplog):
     exa = which('exa')
     bpf_program.add_profile(exa, True)
-    bpf_program.add_fs_rule(exa, "/etc/ld.so.cache", FS_ACCESS.READ)
-    bpf_program.add_fs_rule(exa, "/usr/lib/libz.so.1", FS_ACCESS.READ)
-    bpf_program.add_fs_rule(exa, "/usr/lib/libdl.so.2", FS_ACCESS.READ)
-    bpf_program.add_fs_rule(exa, "/usr/lib/librt.so.1", FS_ACCESS.READ)
-    bpf_program.add_fs_rule(exa, "/usr/lib/libpthread.so.0", FS_ACCESS.READ)
-    bpf_program.add_fs_rule(exa, "/usr/lib/libgcc_s.so.1", FS_ACCESS.READ)
-    bpf_program.add_fs_rule(exa, "/usr/lib/libc.so.6", FS_ACCESS.READ)
-    bpf_program.add_fs_rule(exa, "/usr/lib/perl5/5.30/core_perl/CORE/dquote_inline.h", FS_ACCESS.EXEC,)
-    bpf_program.add_fs_rule(exa, "/usr/lib/libnss_files-2.31.so", FS_ACCESS.EXEC | FS_ACCESS.READ,)
-    bpf_program.add_fs_rule(exa, "/etc/localtime", FS_ACCESS.READ | FS_ACCESS.EXEC,)
-    bpf_program.add_fs_rule(exa, "/usr/lib/locale/locale-archive", FS_ACCESS.READ)
-    bpf_program.add_fs_rule(exa, "/etc/nsswitch.conf", FS_ACCESS.READ)
-    bpf_program.add_fs_rule(exa, "/etc/passwd", FS_ACCESS.READ)
-    bpf_program.add_fs_rule(exa, "/var", FS_ACCESS.EXEC)
-    bpf_program.add_fs_rule(exa, "/run/nscd", FS_ACCESS.EXEC)
-    bpf_program.add_fs_rule(exa, '/proc', FS_ACCESS.EXEC)
-    bpf_program.add_fs_rule(exa, '/tmp/bpfbox', FS_ACCESS.READ | FS_ACCESS.EXEC)
+    bpf_program.add_fs_rule(exa, "/etc/ld.so.cache", FS_ACCESS.READ | FS_ACCESS.GETATTR)
+    bpf_program.add_fs_rule(exa, "/usr/lib/libz.so.1", FS_ACCESS.READ | FS_ACCESS.GETATTR)
+    bpf_program.add_fs_rule(exa, "/usr/lib/libdl.so.2", FS_ACCESS.READ | FS_ACCESS.GETATTR)
+    bpf_program.add_fs_rule(exa, "/usr/lib/librt.so.1", FS_ACCESS.READ | FS_ACCESS.GETATTR)
+    bpf_program.add_fs_rule(exa, "/usr/lib/libpthread.so.0", FS_ACCESS.READ | FS_ACCESS.GETATTR)
+    bpf_program.add_fs_rule(exa, "/usr/lib/libgcc_s.so.1", FS_ACCESS.READ | FS_ACCESS.GETATTR)
+    bpf_program.add_fs_rule(exa, "/usr/lib/libc.so.6", FS_ACCESS.READ | FS_ACCESS.GETATTR)
+    bpf_program.add_fs_rule(exa, "/usr/lib/perl5/5.30/core_perl/CORE/dquote_inline.h", FS_ACCESS.EXEC | FS_ACCESS.GETATTR)
+    bpf_program.add_fs_rule(exa, "/usr/lib/libnss_files-2.31.so", FS_ACCESS.EXEC | FS_ACCESS.READ | FS_ACCESS.GETATTR)
+    bpf_program.add_fs_rule(exa, "/etc/localtime", FS_ACCESS.READ | FS_ACCESS.EXEC | FS_ACCESS.GETATTR)
+    bpf_program.add_fs_rule(exa, "/usr/lib/locale/locale-archive", FS_ACCESS.READ | FS_ACCESS.GETATTR)
+    bpf_program.add_fs_rule(exa, "/etc/nsswitch.conf", FS_ACCESS.READ | FS_ACCESS.GETATTR)
+    bpf_program.add_fs_rule(exa, "/etc/passwd", FS_ACCESS.READ | FS_ACCESS.GETATTR)
+    bpf_program.add_fs_rule(exa, "/var", FS_ACCESS.EXEC | FS_ACCESS.GETATTR)
+    bpf_program.add_fs_rule(exa, "/run/nscd", FS_ACCESS.EXEC | FS_ACCESS.GETATTR)
+    bpf_program.add_fs_rule(exa, '/proc', FS_ACCESS.EXEC | FS_ACCESS.GETATTR)
+    bpf_program.add_fs_rule(exa, '/tmp/bpfbox', FS_ACCESS.READ | FS_ACCESS.EXEC | FS_ACCESS.GETATTR)
+    bpf_program.add_fs_rule(exa, '/tmp/bpfbox/a', FS_ACCESS.GETATTR)
+    bpf_program.add_fs_rule(exa, '/tmp/bpfbox/b', FS_ACCESS.GETATTR)
+    bpf_program.add_fs_rule(exa, '/tmp/bpfbox/c', FS_ACCESS.GETATTR)
+    bpf_program.add_fs_rule(exa, '/tmp/bpfbox/d', FS_ACCESS.GETATTR)
 
     out = subprocess.check_output([exa, '/tmp/bpfbox']).decode('utf-8')
     assert out.strip() == '\n'.join(sorted(os.listdir('/tmp/bpfbox')))
@@ -182,12 +219,16 @@ def test_exa(bpf_program: BPFProgram, caplog):
 def test_ls(bpf_program: BPFProgram, caplog):
     ls = which('ls')
     bpf_program.add_profile(ls, True)
-    bpf_program.add_fs_rule(ls, "/etc/ld.so.cache", FS_ACCESS.READ)
-    bpf_program.add_fs_rule(ls, "/usr/lib/libcap.so.2", FS_ACCESS.READ)
-    bpf_program.add_fs_rule(ls, "/usr/lib/libc.so.6", FS_ACCESS.READ)
-    bpf_program.add_fs_rule(ls, "/usr/lib/locale/locale-archive", FS_ACCESS.READ)
+    bpf_program.add_fs_rule(ls, "/etc/ld.so.cache", FS_ACCESS.READ | FS_ACCESS.GETATTR)
+    bpf_program.add_fs_rule(ls, "/usr/lib/libcap.so.2", FS_ACCESS.READ | FS_ACCESS.GETATTR)
+    bpf_program.add_fs_rule(ls, "/usr/lib/libc.so.6", FS_ACCESS.READ | FS_ACCESS.GETATTR)
+    bpf_program.add_fs_rule(ls, "/usr/lib/locale/locale-archive", FS_ACCESS.READ | FS_ACCESS.GETATTR)
     bpf_program.add_fs_rule(ls, '/proc', FS_ACCESS.EXEC)
-    bpf_program.add_fs_rule(ls, '/tmp/bpfbox', FS_ACCESS.READ)
+    bpf_program.add_fs_rule(ls, '/tmp/bpfbox', FS_ACCESS.READ | FS_ACCESS.GETATTR)
+    bpf_program.add_fs_rule(ls, '/tmp/bpfbox/a', FS_ACCESS.GETATTR)
+    bpf_program.add_fs_rule(ls, '/tmp/bpfbox/b', FS_ACCESS.GETATTR)
+    bpf_program.add_fs_rule(ls, '/tmp/bpfbox/c', FS_ACCESS.GETATTR)
+    bpf_program.add_fs_rule(ls, '/tmp/bpfbox/d', FS_ACCESS.GETATTR)
 
     out = subprocess.check_output([ls, '/tmp/bpfbox']).decode('utf-8')
     assert out.strip() == '\n'.join(sorted(os.listdir('/tmp/bpfbox')))

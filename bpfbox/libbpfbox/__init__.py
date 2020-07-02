@@ -55,6 +55,7 @@ def _add_command(command, argtypes, restype=None):
 
 _add_command('add_profile', [ct.c_ulonglong, ct.c_uint8])
 _add_command('add_fs_rule', [ct.c_ulonglong, ct.c_ulong, ct.c_ulong, ct.c_ulong, ct.c_uint])
+_add_command('add_procfs_rule', [ct.c_ulonglong, ct.c_ulonglong, ct.c_ulong, ct.c_uint])
 
 
 def register_uprobes(bpf):

@@ -52,6 +52,17 @@ void execve_or_die(const char *path)
     }
 }
 
+void chown_or_die(const char *path, uid_t owner, gid_t group)
+{
+    int rc = chown(path, owner, group);
+
+    if (rc < 0 && errno == EPERM) {
+        fprintf(stderr, "chown(%s, %d, %d) failed with %d\n", path, owner,
+                group, rc);
+        exit(1);
+    }
+}
+
 int main(int argc, char **argv)
 {
     int fd;
@@ -159,6 +170,19 @@ int main(int argc, char **argv)
 
     if (!strcmp(argv[1], "proc-1")) {
         fd = open_or_die("/proc/1/status", O_RDONLY);
+        close(fd);
+    }
+
+    if (!strcmp(argv[1], "proc-sleep") && argc > 2) {
+        int sleep_pid = atoi(argv[2]);
+        char sleep_path[256];
+        sprintf(sleep_path, "/proc/%d/status", sleep_pid);
+        fd = open_or_die(sleep_path, O_RDONLY);
+        close(fd);
+    }
+
+    if (!strcmp(argv[1], "chown-a")) {
+        chown_or_die("/tmp/bpfbox/a", 0, 0);
         close(fd);
     }
 
