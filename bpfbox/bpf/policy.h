@@ -38,12 +38,12 @@ struct bpfbox_profile_t {
 };
 
 /* =========================================================================
- * Policy Data Structures
+ * Policies and Actions
  * ========================================================================= */
 
 /* use a #define here instead of typedef to help userspace
  * interpret arguments */
-#define bpfbox_access_vector_t u32
+#define bpfbox_accesss_t u32
 
 /* each action represents a BPFBox policy decision. */
 enum bpfbox_action_t {
@@ -57,9 +57,21 @@ enum bpfbox_action_t {
 
 /* represents allow, taint, and audit access vectors */
 struct bpfbox_policy_t {
-    bpfbox_access_vector_t allow;
-    bpfbox_access_vector_t taint;
-    bpfbox_access_vector_t audit;
+    bpfbox_accesss_t allow;
+    bpfbox_accesss_t taint;
+    bpfbox_accesss_t audit;
+};
+
+/* =========================================================================
+ * File System Policy
+ * ========================================================================= */
+
+enum bpfbox_fs_access_t {
+    FS_NONE = 0x00000000,
+    FS_READ = 0x00000001,
+    FS_WRITE = 0x00000002,
+    FS_APPEND = 0x00000004,
+    FS_EXEC = 0x00000008,
 };
 
 /* uniquely computes an (inode, profile) pair. */
@@ -73,11 +85,11 @@ struct bpfbox_fs_policy_key_t {
  * Audit Data Structures
  * ========================================================================= */
 
-#define STRUCT_AUDIT_COMMON        \
-    u32 uid;                       \
-    u32 pid;                       \
-    u64 profile_key;               \
-    bpfbox_access_vector_t access; \
+#define STRUCT_AUDIT_COMMON  \
+    u32 uid;                 \
+    u32 pid;                 \
+    u64 profile_key;         \
+    bpfbox_accesss_t access; \
     enum bpfbox_action_t action;
 
 #define FILTER_AUDIT(action)                                          \

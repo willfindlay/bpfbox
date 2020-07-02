@@ -85,17 +85,49 @@ def test_fs_allow_read_write(bpf_program: BPFProgram, caplog):
     subprocess.check_call([OPEN_PATH, 'simple-read-and-readwrite'])
 
 
+def test_fs_allow_append_only(bpf_program: BPFProgram, caplog):
+    bpf_program.add_profile(OPEN_PATH, False)
+    bpf_program.add_fs_rule(OPEN_PATH, '/tmp/bpfbox/a', FS_ACCESS.READ, BPFBOX_ACTION.TAINT)
+    bpf_program.add_fs_rule(OPEN_PATH, '/tmp/bpfbox/a', FS_ACCESS.APPEND)
+
+    subprocess.check_call([OPEN_PATH, 'simple-write-append'])
+
+    with pytest.raises(subprocess.CalledProcessError):
+        subprocess.check_call([OPEN_PATH, 'simple-write-no-append'])
+
+
+def test_fs_allow_write_only(bpf_program: BPFProgram, caplog):
+    bpf_program.add_profile(OPEN_PATH, False)
+    bpf_program.add_fs_rule(OPEN_PATH, '/tmp/bpfbox/a', FS_ACCESS.READ, BPFBOX_ACTION.TAINT)
+    bpf_program.add_fs_rule(OPEN_PATH, '/tmp/bpfbox/a', FS_ACCESS.WRITE)
+
+    with pytest.raises(subprocess.CalledProcessError):
+        subprocess.check_call([OPEN_PATH, 'simple-write-append'])
+
+    subprocess.check_call([OPEN_PATH, 'simple-write-no-append'])
+
+
+def test_fs_allow_write_and_append(bpf_program: BPFProgram, caplog):
+    bpf_program.add_profile(OPEN_PATH, False)
+    bpf_program.add_fs_rule(OPEN_PATH, '/tmp/bpfbox/a', FS_ACCESS.READ, BPFBOX_ACTION.TAINT)
+    bpf_program.add_fs_rule(OPEN_PATH, '/tmp/bpfbox/a', FS_ACCESS.WRITE | FS_ACCESS.APPEND)
+
+    subprocess.check_call([OPEN_PATH, 'simple-write-append'])
+
+    subprocess.check_call([OPEN_PATH, 'simple-write-no-append'])
+
+
 def test_fs_complex_policy(bpf_program: BPFProgram, caplog):
     bpf_program.add_profile(OPEN_PATH, False)
     bpf_program.add_fs_rule(OPEN_PATH, '/tmp/bpfbox/a', FS_ACCESS.READ, BPFBOX_ACTION.TAINT)
     bpf_program.add_fs_rule(OPEN_PATH, '/tmp/bpfbox/a', FS_ACCESS.READ | FS_ACCESS.WRITE)
-    bpf_program.add_fs_rule(OPEN_PATH, '/tmp/bpfbox/b', FS_ACCESS.WRITE | FS_ACCESS.APPEND)
+    bpf_program.add_fs_rule(OPEN_PATH, '/tmp/bpfbox/b', FS_ACCESS.APPEND)
     bpf_program.add_fs_rule(OPEN_PATH, '/tmp/bpfbox/c', FS_ACCESS.READ)
     bpf_program.add_fs_rule(OPEN_PATH, '/tmp/bpfbox/d', FS_ACCESS.EXEC)
 
     subprocess.check_call([OPEN_PATH, 'complex'])
 
-    subprocess.check_call([OPEN_PATH, 'complex-with-append'])
+    subprocess.check_call([OPEN_PATH, 'complex-with-extra'])
 
     with pytest.raises(subprocess.CalledProcessError):
         subprocess.check_call([OPEN_PATH, 'complex-with-invalid'])
