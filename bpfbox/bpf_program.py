@@ -146,11 +146,11 @@ class BPFProgram:
         except AttributeError:
             logger.warning("Unable to properly clean up BPF program")
 
-    def _format_exe(self, profile_key, pid):
-        return '%s (%d)' % (self.profile_key_to_exe[profile_key], pid)
+    def _format_exe(self, profile_key, pid, uid):
+        return '%s (%d, %d)' % (self.profile_key_to_exe[profile_key], pid, uid)
 
     def _format_dev(self, s_id, st_dev):
-        return '%-4d (%s)' % (st_dev, s_id)
+        return '%d (%s)' % (st_dev, s_id)
 
     def _register_ring_buffers(self):
         logger.info('Registering ring buffers...')
@@ -158,29 +158,11 @@ class BPFProgram:
         @ringbuf_callback(self.bpf, 'fs_audit_events')
         def fs_audit_events(ctx, event, size):
             logger.audit(
-                'event=FS action=%-8s uid=%-4d exe=%-18s st_ino=%-8d st_dev=%-12s access=%-11s'
+                'action=%s access=FS_%s exe=%s st_ino=%d st_dev=%s'
                 % (
                     BPFBOX_ACTION(event.action),
-                    event.uid,
-                    self._format_exe(event.profile_key, event.pid),
-                    event.st_ino,
-                    self._format_dev(event.s_id.decode('utf-8'), event.st_dev),
                     FS_ACCESS(event.access),
-                )
-            )
-
-        # Debugging below this line  ---------------------------------------
-
-        if not self.debug:
-            return
-
-        @ringbuf_callback(self.bpf, 'task_to_inode_debug_events')
-        def task_to_inode_debug_events(ctx, event, size):
-            logger.debug(
-                'task_to_inode pid=%-8d exe=%-18s st_ino=%-8d st_dev=%-12s'
-                % (
-                    event.pid,
-                    self._format_exe(event.profile_key, event.pid),
+                    self._format_exe(event.profile_key, event.pid, event.uid),
                     event.st_ino,
                     self._format_dev(event.s_id.decode('utf-8'), event.st_dev),
                 )
