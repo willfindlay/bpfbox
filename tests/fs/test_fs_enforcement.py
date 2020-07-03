@@ -26,6 +26,7 @@ import os
 import signal
 import logging
 import time
+from shutil import rmtree
 
 from bpfbox.argument_parser import parse_args
 from bpfbox.bpf_program import BPFProgram
@@ -37,21 +38,31 @@ from bpfbox import defs
 DRIVER_PATH = os.path.join(defs.project_path, 'tests/driver')
 OPEN_PATH = os.path.join(DRIVER_PATH, 'open')
 
+@pytest.fixture
+def setup_testdir():
+    rmtree('/tmp/bpfbox', ignore_errors=True)
+    os.mkdir('/tmp/bpfbox')
+    open('/tmp/bpfbox/a', 'a').close()
+    open('/tmp/bpfbox/b', 'a').close()
+    open('/tmp/bpfbox/c', 'a').close()
+    open('/tmp/bpfbox/d', 'a').close()
+    os.chmod('/tmp/bpfbox/d', 0o755)
 
-def test_fs_implicit_taint(bpf_program: BPFProgram, caplog):
+
+def test_fs_implicit_taint(bpf_program: BPFProgram, caplog, setup_testdir):
     bpf_program.add_profile(OPEN_PATH, True)
 
     with pytest.raises(subprocess.CalledProcessError):
         subprocess.check_call(OPEN_PATH)
 
 
-def test_fs_no_taint(bpf_program: BPFProgram, caplog):
+def test_fs_no_taint(bpf_program: BPFProgram, caplog, setup_testdir):
     bpf_program.add_profile(OPEN_PATH, False)
 
     subprocess.check_call(OPEN_PATH)
 
 
-def test_fs_taint(bpf_program: BPFProgram, caplog):
+def test_fs_taint(bpf_program: BPFProgram, caplog, setup_testdir):
     bpf_program.add_profile(OPEN_PATH, False)
     bpf_program.add_fs_rule(OPEN_PATH, '/tmp/bpfbox/a', FS_ACCESS.READ, BPFBOX_ACTION.TAINT)
 
@@ -59,7 +70,7 @@ def test_fs_taint(bpf_program: BPFProgram, caplog):
         subprocess.check_call([OPEN_PATH, 'simple-read'])
 
 
-def test_fs_allow_read_only(bpf_program: BPFProgram, caplog):
+def test_fs_allow_read_only(bpf_program: BPFProgram, caplog, setup_testdir):
     bpf_program.add_profile(OPEN_PATH, False)
     bpf_program.add_fs_rule(OPEN_PATH, '/tmp/bpfbox/a', FS_ACCESS.READ, BPFBOX_ACTION.TAINT)
     bpf_program.add_fs_rule(OPEN_PATH, '/tmp/bpfbox/a', FS_ACCESS.READ)
@@ -73,7 +84,7 @@ def test_fs_allow_read_only(bpf_program: BPFProgram, caplog):
         subprocess.check_call([OPEN_PATH, 'simple-read-and-readwrite'])
 
 
-def test_fs_allow_read_write(bpf_program: BPFProgram, caplog):
+def test_fs_allow_read_write(bpf_program: BPFProgram, caplog, setup_testdir):
     bpf_program.add_profile(OPEN_PATH, False)
     bpf_program.add_fs_rule(OPEN_PATH, '/tmp/bpfbox/a', FS_ACCESS.READ, BPFBOX_ACTION.TAINT)
     bpf_program.add_fs_rule(OPEN_PATH, '/tmp/bpfbox/a', FS_ACCESS.READ | FS_ACCESS.WRITE)
@@ -85,7 +96,7 @@ def test_fs_allow_read_write(bpf_program: BPFProgram, caplog):
     subprocess.check_call([OPEN_PATH, 'simple-read-and-readwrite'])
 
 
-def test_fs_allow_append_only(bpf_program: BPFProgram, caplog):
+def test_fs_allow_append_only(bpf_program: BPFProgram, caplog, setup_testdir):
     bpf_program.add_profile(OPEN_PATH, False)
     bpf_program.add_fs_rule(OPEN_PATH, '/tmp/bpfbox/a', FS_ACCESS.READ, BPFBOX_ACTION.TAINT)
     bpf_program.add_fs_rule(OPEN_PATH, '/tmp/bpfbox/a', FS_ACCESS.APPEND)
@@ -96,7 +107,7 @@ def test_fs_allow_append_only(bpf_program: BPFProgram, caplog):
         subprocess.check_call([OPEN_PATH, 'simple-write-no-append'])
 
 
-def test_fs_allow_write_only(bpf_program: BPFProgram, caplog):
+def test_fs_allow_write_only(bpf_program: BPFProgram, caplog, setup_testdir):
     bpf_program.add_profile(OPEN_PATH, False)
     bpf_program.add_fs_rule(OPEN_PATH, '/tmp/bpfbox/a', FS_ACCESS.READ, BPFBOX_ACTION.TAINT)
     bpf_program.add_fs_rule(OPEN_PATH, '/tmp/bpfbox/a', FS_ACCESS.WRITE)
@@ -107,7 +118,7 @@ def test_fs_allow_write_only(bpf_program: BPFProgram, caplog):
     subprocess.check_call([OPEN_PATH, 'simple-write-no-append'])
 
 
-def test_fs_allow_write_and_append(bpf_program: BPFProgram, caplog):
+def test_fs_allow_write_and_append(bpf_program: BPFProgram, caplog, setup_testdir):
     bpf_program.add_profile(OPEN_PATH, False)
     bpf_program.add_fs_rule(OPEN_PATH, '/tmp/bpfbox/a', FS_ACCESS.READ, BPFBOX_ACTION.TAINT)
     bpf_program.add_fs_rule(OPEN_PATH, '/tmp/bpfbox/a', FS_ACCESS.WRITE | FS_ACCESS.APPEND)
@@ -117,7 +128,7 @@ def test_fs_allow_write_and_append(bpf_program: BPFProgram, caplog):
     subprocess.check_call([OPEN_PATH, 'simple-write-no-append'])
 
 
-def test_fs_complex_policy(bpf_program: BPFProgram, caplog):
+def test_fs_complex_policy(bpf_program: BPFProgram, caplog, setup_testdir):
     bpf_program.add_profile(OPEN_PATH, False)
     bpf_program.add_fs_rule(OPEN_PATH, '/tmp/bpfbox/a', FS_ACCESS.READ, BPFBOX_ACTION.TAINT)
     bpf_program.add_fs_rule(OPEN_PATH, '/tmp/bpfbox/a', FS_ACCESS.READ | FS_ACCESS.WRITE)
@@ -133,7 +144,7 @@ def test_fs_complex_policy(bpf_program: BPFProgram, caplog):
         subprocess.check_call([OPEN_PATH, 'complex-with-invalid'])
 
 
-def test_parent_child(bpf_program: BPFProgram, caplog):
+def test_parent_child(bpf_program: BPFProgram, caplog, setup_testdir):
     bpf_program.add_profile(OPEN_PATH, False)
     bpf_program.add_fs_rule(OPEN_PATH, '/tmp/bpfbox/a', FS_ACCESS.READ, BPFBOX_ACTION.TAINT)
     bpf_program.add_fs_rule(OPEN_PATH, '/tmp/bpfbox/a', FS_ACCESS.READ)
@@ -142,7 +153,7 @@ def test_parent_child(bpf_program: BPFProgram, caplog):
         subprocess.check_call([OPEN_PATH, 'parent-child'])
 
 
-def test_procfs(bpf_program: BPFProgram, caplog):
+def test_procfs(bpf_program: BPFProgram, caplog, setup_testdir):
     bpf_program.add_profile(OPEN_PATH, False)
     bpf_program.add_fs_rule(OPEN_PATH, '/tmp/bpfbox/a', FS_ACCESS.READ, BPFBOX_ACTION.TAINT)
     bpf_program.add_fs_rule(OPEN_PATH, '/proc', FS_ACCESS.EXEC)
@@ -153,7 +164,7 @@ def test_procfs(bpf_program: BPFProgram, caplog):
         subprocess.check_call([OPEN_PATH, 'proc-1'])
 
 
-def test_chown_allowed(bpf_program: BPFProgram, caplog):
+def test_chown_allowed(bpf_program: BPFProgram, caplog, setup_testdir):
     bpf_program.add_profile(OPEN_PATH, False)
     bpf_program.add_fs_rule(OPEN_PATH, '/tmp/bpfbox/a', FS_ACCESS.READ, BPFBOX_ACTION.TAINT)
     bpf_program.add_fs_rule(OPEN_PATH, '/tmp/bpfbox/a', FS_ACCESS.READ | FS_ACCESS.SETATTR)
@@ -161,7 +172,7 @@ def test_chown_allowed(bpf_program: BPFProgram, caplog):
     subprocess.check_call([OPEN_PATH, 'chown-a'])
 
 
-def test_chown_disallowed(bpf_program: BPFProgram, caplog):
+def test_chown_disallowed(bpf_program: BPFProgram, caplog, setup_testdir):
     bpf_program.add_profile(OPEN_PATH, False)
     bpf_program.add_fs_rule(OPEN_PATH, '/tmp/bpfbox/a', FS_ACCESS.READ, BPFBOX_ACTION.TAINT)
     bpf_program.add_fs_rule(OPEN_PATH, '/tmp/bpfbox/a', FS_ACCESS.READ)
@@ -170,8 +181,42 @@ def test_chown_disallowed(bpf_program: BPFProgram, caplog):
         subprocess.check_call([OPEN_PATH, 'chown-a'])
 
 
+def test_create_file_allowed(bpf_program: BPFProgram, caplog, setup_testdir):
+    bpf_program.add_profile(OPEN_PATH, False)
+    bpf_program.add_fs_rule(OPEN_PATH, '/tmp/bpfbox/a', FS_ACCESS.READ, BPFBOX_ACTION.TAINT)
+    bpf_program.add_fs_rule(OPEN_PATH, '/tmp/bpfbox', FS_ACCESS.WRITE | FS_ACCESS.EXEC)
+
+    subprocess.check_call([OPEN_PATH, 'create-file'])
+
+
+def test_create_file_disallowed(bpf_program: BPFProgram, caplog, setup_testdir):
+    bpf_program.add_profile(OPEN_PATH, False)
+    bpf_program.add_fs_rule(OPEN_PATH, '/tmp/bpfbox/a', FS_ACCESS.READ, BPFBOX_ACTION.TAINT)
+    bpf_program.add_fs_rule(OPEN_PATH, '/tmp/bpfbox', FS_ACCESS.READ | FS_ACCESS.EXEC)
+
+    with pytest.raises(subprocess.CalledProcessError):
+        subprocess.check_call([OPEN_PATH, 'create-file'])
+
+
+def test_create_dir_allowed(bpf_program: BPFProgram, caplog, setup_testdir):
+    bpf_program.add_profile(OPEN_PATH, False)
+    bpf_program.add_fs_rule(OPEN_PATH, '/tmp/bpfbox/a', FS_ACCESS.READ, BPFBOX_ACTION.TAINT)
+    bpf_program.add_fs_rule(OPEN_PATH, '/tmp/bpfbox', FS_ACCESS.WRITE | FS_ACCESS.EXEC)
+
+    subprocess.check_call([OPEN_PATH, 'create-dir'])
+
+
+def test_create_dir_disallowed(bpf_program: BPFProgram, caplog, setup_testdir):
+    bpf_program.add_profile(OPEN_PATH, False)
+    bpf_program.add_fs_rule(OPEN_PATH, '/tmp/bpfbox/a', FS_ACCESS.READ, BPFBOX_ACTION.TAINT)
+    bpf_program.add_fs_rule(OPEN_PATH, '/tmp/bpfbox', FS_ACCESS.READ | FS_ACCESS.EXEC)
+
+    with pytest.raises(subprocess.CalledProcessError):
+        subprocess.check_call([OPEN_PATH, 'create-dir'])
+
+
 @pytest.mark.skipif(not which('sleep'), reason='sleep not found on system')
-def test_procfs_other_process(bpf_program: BPFProgram, caplog):
+def test_procfs_other_process(bpf_program: BPFProgram, caplog, setup_testdir):
     sleep_path = which('sleep')
     bpf_program.add_profile(OPEN_PATH, False)
     bpf_program.add_fs_rule(OPEN_PATH, '/tmp/bpfbox/a', FS_ACCESS.READ, BPFBOX_ACTION.TAINT)
@@ -187,7 +232,7 @@ def test_procfs_other_process(bpf_program: BPFProgram, caplog):
 
 
 @pytest.mark.skipif(not which('exa'), reason='exa not found on system')
-def test_exa(bpf_program: BPFProgram, caplog):
+def test_exa(bpf_program: BPFProgram, caplog, setup_testdir):
     exa = which('exa')
     bpf_program.add_profile(exa, True)
     bpf_program.add_fs_rule(exa, "/etc/ld.so.cache", FS_ACCESS.READ | FS_ACCESS.GETATTR)
@@ -216,7 +261,7 @@ def test_exa(bpf_program: BPFProgram, caplog):
     assert out.strip() == '\n'.join(sorted(os.listdir('/tmp/bpfbox')))
 
 @pytest.mark.skipif(not which('ls'), reason='ls not found on system')
-def test_ls(bpf_program: BPFProgram, caplog):
+def test_ls(bpf_program: BPFProgram, caplog, setup_testdir):
     ls = which('ls')
     bpf_program.add_profile(ls, True)
     bpf_program.add_fs_rule(ls, "/etc/ld.so.cache", FS_ACCESS.READ | FS_ACCESS.GETATTR)

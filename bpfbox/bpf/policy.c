@@ -102,16 +102,6 @@ static __always_inline void audit_fs(struct bpfbox_process_t *process,
 // }
 
 /* =========================================================================
- * Debugging
- * ========================================================================= */
-
-#ifdef BPFBOX_DEBUG
-
-BPF_RINGBUF_OUTPUT(task_to_inode_debug_events, 1 << 3);
-
-#endif
-
-/* =========================================================================
  * Helper Functions
  * ========================================================================= */
 
@@ -207,6 +197,35 @@ static __always_inline enum bpfbox_fs_access_t file_mask_to_access(int mask)
     return access;
 }
 
+/* Linux fmode mask to bpfbox access */
+static __always_inline enum bpfbox_fs_access_t fmode_to_access(umode_t mask)
+{
+    enum bpfbox_fs_access_t access = 0;
+
+    if (mask & (FMODE_READ | FMODE_PREAD)) {
+        access |= FS_READ;
+    }
+
+    // Appending and writing are mutually exclusive
+    if (mask & (FMODE_WRITE | FMODE_PWRITE)) {
+        if (mask & FMODE_LSEEK) {
+            access |= FS_WRITE;
+        } else {
+            access |= FS_APPEND;
+        }
+    }
+
+    if (mask & FMODE_EXEC) {
+        access |= FS_EXEC;
+    }
+
+    if (mask & FMODE_WRITE_IOCTL) {
+        access |= FS_IOCTL;
+    }
+
+    return access;
+}
+
 /* =========================================================================
  * LSM Programs
  * ========================================================================= */
@@ -229,13 +248,67 @@ LSM_PROBE(inode_permission, struct inode *inode, int mask)
 
     enum bpfbox_fs_access_t access = file_mask_to_access(mask);
 
+    if (!access)
+        return 0;
+
     enum bpfbox_action_t action = policy_decision(process, policy, access);
     audit_fs(process, action, inode, access);
 
     return action & ACTION_DENY ? -EPERM : 0;
 }
 
-LSM_PROBE(inode_setattr, struct dentry *dentry, struct iattr *attr)
+/* A task attempts to create @dentry in @dir with mode @mode */
+LSM_PROBE(inode_create, struct inode *dir, struct dentry *dentry, umode_t mode)
+{
+    struct bpfbox_process_t *process = get_current_process();
+    if (!process) {
+        return 0;
+    }
+
+    struct bpfbox_fs_policy_key_t key = {
+        .st_ino = dir->i_ino,
+        .st_dev = (u32)new_encode_dev(dir->i_sb->s_dev),
+        .profile_key = process->profile_key,
+    };
+
+    struct bpfbox_policy_t *policy = fs_policy.lookup(&key);
+
+    enum bpfbox_action_t action = policy_decision(process, policy, FS_WRITE);
+    audit_fs(process, action, dir, FS_WRITE);
+
+    // FIXME: if it's a temporary file, perhaps we should implicitly allow this
+    // profile to open it in the future?
+
+    return action & ACTION_DENY ? -EPERM : 0;
+}
+
+/* A task attempts to create @dentry in @dir with mode @mode */
+LSM_PROBE(inode_mkdir, struct inode *dir, struct dentry *dentry, umode_t mode)
+{
+    struct bpfbox_process_t *process = get_current_process();
+    if (!process) {
+        return 0;
+    }
+
+    struct bpfbox_fs_policy_key_t key = {
+        .st_ino = dir->i_ino,
+        .st_dev = (u32)new_encode_dev(dir->i_sb->s_dev),
+        .profile_key = process->profile_key,
+    };
+
+    struct bpfbox_policy_t *policy = fs_policy.lookup(&key);
+
+    enum bpfbox_action_t action = policy_decision(process, policy, FS_WRITE);
+    audit_fs(process, action, dir, FS_WRITE);
+
+    // FIXME: if it's a temporary file, perhaps we should implicitly allow this
+    // profile to open it in the future?
+
+    return action & ACTION_DENY ? -EPERM : 0;
+}
+
+/* A task attempts to change an attribute of @dentry */
+LSM_PROBE(inode_setattr, struct dentry *dentry)
 {
     struct bpfbox_process_t *process = get_current_process();
     if (!process) {
@@ -258,6 +331,7 @@ LSM_PROBE(inode_setattr, struct dentry *dentry, struct iattr *attr)
     return action & ACTION_DENY ? -EPERM : 0;
 }
 
+/* A task attempts to read an attribute of @path */
 LSM_PROBE(inode_getattr, struct path *path)
 {
     struct bpfbox_process_t *process = get_current_process();
@@ -281,6 +355,102 @@ LSM_PROBE(inode_getattr, struct path *path)
     return action & ACTION_DENY ? -EPERM : 0;
 }
 
+/* A task attempts to change an extended attribute of @dentry */
+LSM_PROBE(inode_setxattr, struct dentry *dentry)
+{
+    struct bpfbox_process_t *process = get_current_process();
+    if (!process) {
+        return 0;
+    }
+
+    struct inode *inode = dentry->d_inode;
+
+    struct bpfbox_fs_policy_key_t key = {
+        .st_ino = inode->i_ino,
+        .st_dev = (u32)new_encode_dev(inode->i_sb->s_dev),
+        .profile_key = process->profile_key,
+    };
+
+    struct bpfbox_policy_t *policy = fs_policy.lookup(&key);
+
+    enum bpfbox_action_t action = policy_decision(process, policy, FS_SETATTR);
+    audit_fs(process, action, inode, FS_SETATTR);
+
+    return action & ACTION_DENY ? -EPERM : 0;
+}
+
+/* A task attempts to get an extended attribute of @dentry */
+LSM_PROBE(inode_getxattr, struct dentry *dentry)
+{
+    struct bpfbox_process_t *process = get_current_process();
+    if (!process) {
+        return 0;
+    }
+
+    struct inode *inode = dentry->d_inode;
+
+    struct bpfbox_fs_policy_key_t key = {
+        .st_ino = inode->i_ino,
+        .st_dev = (u32)new_encode_dev(inode->i_sb->s_dev),
+        .profile_key = process->profile_key,
+    };
+
+    struct bpfbox_policy_t *policy = fs_policy.lookup(&key);
+
+    enum bpfbox_action_t action = policy_decision(process, policy, FS_GETATTR);
+    audit_fs(process, action, inode, FS_GETATTR);
+
+    return action & ACTION_DENY ? -EPERM : 0;
+}
+
+/* A task attempts to list the extended attributes of @dentry */
+LSM_PROBE(inode_listxattr, struct dentry *dentry)
+{
+    struct bpfbox_process_t *process = get_current_process();
+    if (!process) {
+        return 0;
+    }
+
+    struct inode *inode = dentry->d_inode;
+
+    struct bpfbox_fs_policy_key_t key = {
+        .st_ino = inode->i_ino,
+        .st_dev = (u32)new_encode_dev(inode->i_sb->s_dev),
+        .profile_key = process->profile_key,
+    };
+
+    struct bpfbox_policy_t *policy = fs_policy.lookup(&key);
+
+    enum bpfbox_action_t action = policy_decision(process, policy, FS_GETATTR);
+    audit_fs(process, action, inode, FS_GETATTR);
+
+    return action & ACTION_DENY ? -EPERM : 0;
+}
+
+/* A task attempts to remove an extended attribute from @dentry */
+LSM_PROBE(inode_removexattr, struct dentry *dentry)
+{
+    struct bpfbox_process_t *process = get_current_process();
+    if (!process) {
+        return 0;
+    }
+
+    struct inode *inode = dentry->d_inode;
+
+    struct bpfbox_fs_policy_key_t key = {
+        .st_ino = inode->i_ino,
+        .st_dev = (u32)new_encode_dev(inode->i_sb->s_dev),
+        .profile_key = process->profile_key,
+    };
+
+    struct bpfbox_policy_t *policy = fs_policy.lookup(&key);
+
+    enum bpfbox_action_t action = policy_decision(process, policy, FS_SETATTR);
+    audit_fs(process, action, inode, FS_SETATTR);
+
+    return action & ACTION_DENY ? -EPERM : 0;
+}
+
 /* Bookkeeping for procfs, etc. */
 LSM_PROBE(task_to_inode, struct task_struct *target, struct inode *inode)
 {
@@ -288,29 +458,6 @@ LSM_PROBE(task_to_inode, struct task_struct *target, struct inode *inode)
     if (!process) {
         return 0;
     }
-
-#ifdef BPFBOX_DEBUG
-    struct data_t {
-        u32 pid;
-        u64 profile_key;
-        u32 st_ino;
-        u32 st_dev;
-        char s_id[32];
-    };
-
-    struct data_t *data =
-        task_to_inode_debug_events.ringbuf_reserve(sizeof(struct data_t));
-
-    if (data) {
-        data->pid = process->pid;
-        data->profile_key = process->profile_key;
-        data->st_ino = inode->i_ino;
-        data->st_dev = (u32)new_encode_dev(inode->i_sb->s_dev);
-        bpf_probe_read_str(data->s_id, sizeof(data->s_id), inode->i_sb->s_id);
-
-        task_to_inode_debug_events.ringbuf_submit(data, 0);
-    }
-#endif
 
     struct bpfbox_fs_policy_key_t key = {
         .st_ino = inode->i_ino,

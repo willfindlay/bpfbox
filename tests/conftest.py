@@ -10,20 +10,25 @@ from bpfbox import defs
 AUDIT = BPFBoxLoggerClass.AUDIT
 DEBUG = logging.DEBUG
 
+# Load BPF program
+args = parse_args('--nodaemon --debug'.split())
+defs.init(args)
+b = BPFProgram(enforcing=True, debug=True)
+b.load_bpf()
+
 
 @pytest.fixture(scope='function')
 def bpf_program(caplog):
     # Set log level
     caplog.set_level(DEBUG)
 
-    # Load BPF program
-    args = parse_args('--nodaemon --debug'.split())
-    defs.init(args)
-    b = BPFProgram(enforcing=True, debug=True)
-    b.load_bpf()
-
     yield b
 
-    # Clean up BPF program
     b.bpf.ring_buffer_consume()
-    b.cleanup()
+
+    # Clear all maps
+    b.bpf['processes'].clear()
+    b.bpf['profiles'].clear()
+    b.bpf['fs_policy'].clear()
+    b.bpf['procfs_policy'].clear()
+    # IMPORTANT NOTE: remember to put new maps here

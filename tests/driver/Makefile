@@ -1,5 +1,3 @@
-TESTFILESDIR = /tmp/bpfbox
-
 CC     = gcc
 LDLAGS =
 CFLAGS = -O0
@@ -13,14 +11,5 @@ all: $(EXES)
 clean:
 	rm -f $(EXES) *.o
 
-.PHONY: testfiles
-testfiles:
-	mkdir -p $(TESTFILESDIR)
-	touch $(TESTFILESDIR)/a
-	touch $(TESTFILESDIR)/b
-	touch $(TESTFILESDIR)/c
-	touch $(TESTFILESDIR)/d
-	chmod +x $(TESTFILESDIR)/d
-
-open: open.c | testfiles
+open: open.c
 	$(CC) $(CFLAGS) $(LDFLAGS) -o open open.c
