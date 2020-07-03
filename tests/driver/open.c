@@ -63,6 +63,18 @@ void chown_or_die(const char *path, uid_t owner, gid_t group)
     }
 }
 
+int creat_or_die(const char *path, mode_t mode)
+{
+    int rc = creat(path, mode);
+
+    if (rc < 0 && errno == EPERM) {
+        fprintf(stderr, "creat(%s, %d) failed with %d\n", path, mode, rc);
+        exit(1);
+    }
+
+    return rc;
+}
+
 int main(int argc, char **argv)
 {
     int fd;
@@ -183,6 +195,11 @@ int main(int argc, char **argv)
 
     if (!strcmp(argv[1], "chown-a")) {
         chown_or_die("/tmp/bpfbox/a", 0, 0);
+        close(fd);
+    }
+
+    if (!strcmp(argv[1], "create-file")) {
+        fd = creat_or_die("/tmp/bpfbox/e", 0);
         close(fd);
     }
 
