@@ -75,6 +75,8 @@ enum bpfbox_fs_access_t {
     FS_SETATTR = 0x00000010,
     FS_GETATTR = 0x00000020,
     FS_IOCTL = 0x00000040,
+    FS_RM = 0x00000080,
+    FS_ADD_LINK = 0x00000100,
 };
 
 /* uniquely computes an (inode, profile) pair. */

@@ -164,6 +164,22 @@ def test_procfs(bpf_program: BPFProgram, caplog, setup_testdir):
         subprocess.check_call([OPEN_PATH, 'proc-1'])
 
 
+@pytest.mark.skipif(not which('sleep'), reason='sleep not found on system')
+def test_procfs_other_process(bpf_program: BPFProgram, caplog, setup_testdir):
+    sleep_path = which('sleep')
+    bpf_program.add_profile(OPEN_PATH, False)
+    bpf_program.add_fs_rule(OPEN_PATH, '/tmp/bpfbox/a', FS_ACCESS.READ, BPFBOX_ACTION.TAINT)
+    bpf_program.add_fs_rule(OPEN_PATH, '/proc', FS_ACCESS.EXEC)
+    bpf_program.add_procfs_rule(OPEN_PATH, sleep_path, FS_ACCESS.READ)
+
+    subprocess.check_call([OPEN_PATH, 'proc-self'])
+
+    # for some reason Popen's pid is always off by 1
+    sleep_pid = subprocess.Popen([sleep_path, '10']).pid + 1
+
+    subprocess.check_call([OPEN_PATH, 'proc-sleep', str(sleep_pid)])
+
+
 def test_chown_allowed(bpf_program: BPFProgram, caplog, setup_testdir):
     bpf_program.add_profile(OPEN_PATH, False)
     bpf_program.add_fs_rule(OPEN_PATH, '/tmp/bpfbox/a', FS_ACCESS.READ, BPFBOX_ACTION.TAINT)
@@ -206,29 +222,111 @@ def test_create_dir_allowed(bpf_program: BPFProgram, caplog, setup_testdir):
     subprocess.check_call([OPEN_PATH, 'create-dir'])
 
 
-def test_create_dir_disallowed(bpf_program: BPFProgram, caplog, setup_testdir):
+def test_create_dir_no_write(bpf_program: BPFProgram, caplog, setup_testdir):
     bpf_program.add_profile(OPEN_PATH, False)
     bpf_program.add_fs_rule(OPEN_PATH, '/tmp/bpfbox/a', FS_ACCESS.READ, BPFBOX_ACTION.TAINT)
-    bpf_program.add_fs_rule(OPEN_PATH, '/tmp/bpfbox', FS_ACCESS.READ | FS_ACCESS.EXEC)
+    bpf_program.add_fs_rule(OPEN_PATH, '/tmp/bpfbox', FS_ACCESS.EXEC)
 
     with pytest.raises(subprocess.CalledProcessError):
         subprocess.check_call([OPEN_PATH, 'create-dir'])
 
 
-@pytest.mark.skipif(not which('sleep'), reason='sleep not found on system')
-def test_procfs_other_process(bpf_program: BPFProgram, caplog, setup_testdir):
-    sleep_path = which('sleep')
+def test_create_dir_no_exec(bpf_program: BPFProgram, caplog, setup_testdir):
     bpf_program.add_profile(OPEN_PATH, False)
     bpf_program.add_fs_rule(OPEN_PATH, '/tmp/bpfbox/a', FS_ACCESS.READ, BPFBOX_ACTION.TAINT)
-    bpf_program.add_fs_rule(OPEN_PATH, '/proc', FS_ACCESS.EXEC)
-    bpf_program.add_procfs_rule(OPEN_PATH, sleep_path, FS_ACCESS.READ)
+    bpf_program.add_fs_rule(OPEN_PATH, '/tmp/bpfbox', FS_ACCESS.WRITE)
 
-    subprocess.check_call([OPEN_PATH, 'proc-self'])
+    with pytest.raises(subprocess.CalledProcessError):
+        subprocess.check_call([OPEN_PATH, 'create-dir'])
 
-    # for some reason Popen's pid is always off by 1
-    sleep_pid = subprocess.Popen([sleep_path, '10']).pid + 1
 
-    subprocess.check_call([OPEN_PATH, 'proc-sleep', str(sleep_pid)])
+def test_rmdir_allowed(bpf_program: BPFProgram, caplog, setup_testdir):
+    os.mkdir('/tmp/bpfbox/e')
+    bpf_program.add_profile(OPEN_PATH, False)
+    bpf_program.add_fs_rule(OPEN_PATH, '/tmp/bpfbox/a', FS_ACCESS.READ, BPFBOX_ACTION.TAINT)
+    bpf_program.add_fs_rule(OPEN_PATH, '/tmp/bpfbox', FS_ACCESS.WRITE | FS_ACCESS.EXEC)
+    bpf_program.add_fs_rule(OPEN_PATH, '/tmp/bpfbox/e', FS_ACCESS.RM)
+
+    subprocess.check_call([OPEN_PATH, 'rmdir'])
+
+
+def test_rmdir_no_write(bpf_program: BPFProgram, caplog, setup_testdir):
+    os.mkdir('/tmp/bpfbox/e')
+    bpf_program.add_profile(OPEN_PATH, False)
+    bpf_program.add_fs_rule(OPEN_PATH, '/tmp/bpfbox/a', FS_ACCESS.READ, BPFBOX_ACTION.TAINT)
+    bpf_program.add_fs_rule(OPEN_PATH, '/tmp/bpfbox', FS_ACCESS.EXEC)
+    bpf_program.add_fs_rule(OPEN_PATH, '/tmp/bpfbox/e', FS_ACCESS.RM)
+
+    with pytest.raises(subprocess.CalledProcessError):
+        subprocess.check_call([OPEN_PATH, 'rmdir'])
+
+
+def test_rmdir_no_rm(bpf_program: BPFProgram, caplog, setup_testdir):
+    os.mkdir('/tmp/bpfbox/e')
+    bpf_program.add_profile(OPEN_PATH, False)
+    bpf_program.add_fs_rule(OPEN_PATH, '/tmp/bpfbox/a', FS_ACCESS.READ, BPFBOX_ACTION.TAINT)
+    bpf_program.add_fs_rule(OPEN_PATH, '/tmp/bpfbox', FS_ACCESS.WRITE | FS_ACCESS.EXEC)
+
+    with pytest.raises(subprocess.CalledProcessError):
+        subprocess.check_call([OPEN_PATH, 'rmdir'])
+
+
+def test_unlink_allowed(bpf_program: BPFProgram, caplog, setup_testdir):
+    open('/tmp/bpfbox/e', 'a').close()
+    bpf_program.add_profile(OPEN_PATH, False)
+    bpf_program.add_fs_rule(OPEN_PATH, '/tmp/bpfbox/a', FS_ACCESS.READ, BPFBOX_ACTION.TAINT)
+    bpf_program.add_fs_rule(OPEN_PATH, '/tmp/bpfbox', FS_ACCESS.WRITE | FS_ACCESS.EXEC)
+    bpf_program.add_fs_rule(OPEN_PATH, '/tmp/bpfbox/e', FS_ACCESS.RM)
+
+    subprocess.check_call([OPEN_PATH, 'unlink'])
+
+
+def test_unlink_no_write(bpf_program: BPFProgram, caplog, setup_testdir):
+    open('/tmp/bpfbox/e', 'a').close()
+    bpf_program.add_profile(OPEN_PATH, False)
+    bpf_program.add_fs_rule(OPEN_PATH, '/tmp/bpfbox/a', FS_ACCESS.READ, BPFBOX_ACTION.TAINT)
+    bpf_program.add_fs_rule(OPEN_PATH, '/tmp/bpfbox', FS_ACCESS.EXEC)
+    bpf_program.add_fs_rule(OPEN_PATH, '/tmp/bpfbox/e', FS_ACCESS.RM)
+
+    with pytest.raises(subprocess.CalledProcessError):
+        subprocess.check_call([OPEN_PATH, 'unlink'])
+
+
+def test_unlink_no_rm(bpf_program: BPFProgram, caplog, setup_testdir):
+    open('/tmp/bpfbox/e', 'a').close()
+    bpf_program.add_profile(OPEN_PATH, False)
+    bpf_program.add_fs_rule(OPEN_PATH, '/tmp/bpfbox/a', FS_ACCESS.READ, BPFBOX_ACTION.TAINT)
+    bpf_program.add_fs_rule(OPEN_PATH, '/tmp/bpfbox', FS_ACCESS.WRITE | FS_ACCESS.EXEC)
+
+    with pytest.raises(subprocess.CalledProcessError):
+        subprocess.check_call([OPEN_PATH, 'unlink'])
+
+
+def test_link_allowed(bpf_program: BPFProgram, caplog, setup_testdir):
+    bpf_program.add_profile(OPEN_PATH, False)
+    bpf_program.add_fs_rule(OPEN_PATH, '/tmp/bpfbox/a', FS_ACCESS.READ, BPFBOX_ACTION.TAINT)
+    bpf_program.add_fs_rule(OPEN_PATH, '/tmp/bpfbox', FS_ACCESS.WRITE)
+    bpf_program.add_fs_rule(OPEN_PATH, '/tmp/bpfbox/a', FS_ACCESS.ADD_LINK)
+
+    subprocess.check_call([OPEN_PATH, 'link'])
+
+
+def test_link_no_write(bpf_program: BPFProgram, caplog, setup_testdir):
+    bpf_program.add_profile(OPEN_PATH, False)
+    bpf_program.add_fs_rule(OPEN_PATH, '/tmp/bpfbox/a', FS_ACCESS.READ, BPFBOX_ACTION.TAINT)
+    bpf_program.add_fs_rule(OPEN_PATH, '/tmp/bpfbox/a', FS_ACCESS.ADD_LINK)
+
+    with pytest.raises(subprocess.CalledProcessError):
+        subprocess.check_call([OPEN_PATH, 'link'])
+
+
+def test_link_no_link(bpf_program: BPFProgram, caplog, setup_testdir):
+    bpf_program.add_profile(OPEN_PATH, False)
+    bpf_program.add_fs_rule(OPEN_PATH, '/tmp/bpfbox/a', FS_ACCESS.READ, BPFBOX_ACTION.TAINT)
+    bpf_program.add_fs_rule(OPEN_PATH, '/tmp/bpfbox', FS_ACCESS.WRITE)
+
+    with pytest.raises(subprocess.CalledProcessError):
+        subprocess.check_call([OPEN_PATH, 'link'])
 
 
 @pytest.mark.skipif(not which('exa'), reason='exa not found on system')
