@@ -329,6 +329,51 @@ def test_link_no_link(bpf_program: BPFProgram, caplog, setup_testdir):
         subprocess.check_call([OPEN_PATH, 'link'])
 
 
+def test_rename_allowed(bpf_program: BPFProgram, caplog, setup_testdir):
+    os.mkdir('/tmp/bpfbox/new_dir')
+    bpf_program.add_profile(OPEN_PATH, False)
+    bpf_program.add_fs_rule(OPEN_PATH, '/tmp/bpfbox/a', FS_ACCESS.READ, BPFBOX_ACTION.TAINT)
+    bpf_program.add_fs_rule(OPEN_PATH, '/tmp/bpfbox', FS_ACCESS.WRITE)
+    bpf_program.add_fs_rule(OPEN_PATH, '/tmp/bpfbox/new_dir', FS_ACCESS.WRITE | FS_ACCESS.EXEC)
+    bpf_program.add_fs_rule(OPEN_PATH, '/tmp/bpfbox/a', FS_ACCESS.RM)
+
+    subprocess.check_call([OPEN_PATH, 'rename'])
+
+
+def test_rename_no_olddir_write(bpf_program: BPFProgram, caplog, setup_testdir):
+    os.mkdir('/tmp/bpfbox/new_dir')
+    bpf_program.add_profile(OPEN_PATH, False)
+    bpf_program.add_fs_rule(OPEN_PATH, '/tmp/bpfbox/a', FS_ACCESS.READ, BPFBOX_ACTION.TAINT)
+    bpf_program.add_fs_rule(OPEN_PATH, '/tmp/bpfbox/new_dir', FS_ACCESS.WRITE | FS_ACCESS.EXEC)
+    bpf_program.add_fs_rule(OPEN_PATH, '/tmp/bpfbox/a', FS_ACCESS.RM)
+
+    with pytest.raises(subprocess.CalledProcessError):
+        subprocess.check_call([OPEN_PATH, 'rename'])
+
+
+def test_rename_no_newdir_write(bpf_program: BPFProgram, caplog, setup_testdir):
+    os.mkdir('/tmp/bpfbox/new_dir')
+    bpf_program.add_profile(OPEN_PATH, False)
+    bpf_program.add_fs_rule(OPEN_PATH, '/tmp/bpfbox/a', FS_ACCESS.READ, BPFBOX_ACTION.TAINT)
+    bpf_program.add_fs_rule(OPEN_PATH, '/tmp/bpfbox', FS_ACCESS.WRITE)
+    bpf_program.add_fs_rule(OPEN_PATH, '/tmp/bpfbox/new_dir', FS_ACCESS.EXEC)
+    bpf_program.add_fs_rule(OPEN_PATH, '/tmp/bpfbox/a', FS_ACCESS.RM)
+
+    with pytest.raises(subprocess.CalledProcessError):
+        subprocess.check_call([OPEN_PATH, 'rename'])
+
+
+def test_rename_no_old_rm(bpf_program: BPFProgram, caplog, setup_testdir):
+    os.mkdir('/tmp/bpfbox/new_dir')
+    bpf_program.add_profile(OPEN_PATH, False)
+    bpf_program.add_fs_rule(OPEN_PATH, '/tmp/bpfbox/a', FS_ACCESS.READ, BPFBOX_ACTION.TAINT)
+    bpf_program.add_fs_rule(OPEN_PATH, '/tmp/bpfbox', FS_ACCESS.WRITE)
+    bpf_program.add_fs_rule(OPEN_PATH, '/tmp/bpfbox/new_dir', FS_ACCESS.WRITE | FS_ACCESS.EXEC)
+
+    with pytest.raises(subprocess.CalledProcessError):
+        subprocess.check_call([OPEN_PATH, 'rename'])
+
+
 @pytest.mark.skipif(not which('exa'), reason='exa not found on system')
 def test_exa(bpf_program: BPFProgram, caplog, setup_testdir):
     exa = which('exa')
