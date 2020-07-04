@@ -80,7 +80,37 @@ void mkdir_or_die(const char *path, mode_t mode)
     int rc = mkdir(path, mode);
 
     if (rc < 0 && errno == EPERM) {
-        fprintf(stderr, "creat(%s, %d) failed with %d\n", path, mode, rc);
+        fprintf(stderr, "mkdir(%s, %d) failed with %d\n", path, mode, rc);
+        exit(1);
+    }
+}
+
+void rmdir_or_die(const char *path)
+{
+    int rc = rmdir(path);
+
+    if (rc < 0 && errno == EPERM) {
+        fprintf(stderr, "rmdir(%s) failed with %d\n", path, rc);
+        exit(1);
+    }
+}
+
+void unlink_or_die(const char *path)
+{
+    int rc = unlink(path);
+
+    if (rc < 0 && errno == EPERM) {
+        fprintf(stderr, "unlink(%s) failed with %d\n", path, rc);
+        exit(1);
+    }
+}
+
+void link_or_die(const char *old, const char *new)
+{
+    int rc = link(old, new);
+
+    if (rc < 0 && errno == EPERM) {
+        fprintf(stderr, "link(%s, %s) failed with %d\n", old, new, rc);
         exit(1);
     }
 }
@@ -215,6 +245,21 @@ int main(int argc, char **argv)
 
     if (!strcmp(argv[1], "create-dir")) {
         mkdir_or_die("/tmp/bpfbox/f", 0);
+        close(fd);
+    }
+
+    if (!strcmp(argv[1], "rmdir")) {
+        rmdir_or_die("/tmp/bpfbox/e");
+        close(fd);
+    }
+
+    if (!strcmp(argv[1], "unlink")) {
+        unlink_or_die("/tmp/bpfbox/e");
+        close(fd);
+    }
+
+    if (!strcmp(argv[1], "link")) {
+        link_or_die("/tmp/bpfbox/a", "/tmp/bpfbox/e");
         close(fd);
     }
 
