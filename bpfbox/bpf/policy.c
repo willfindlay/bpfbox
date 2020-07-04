@@ -281,6 +281,20 @@ LSM_PROBE(inode_create, struct inode *dir, struct dentry *dentry)
     return action & ACTION_DENY ? -EPERM : 0;
 }
 
+/* A task attempts to create a symbolic link @dentry in @dir */
+LSM_PROBE(inode_symlink, struct inode *dir, struct dentry *dentry)
+{
+    struct bpfbox_process_t *process = get_current_process();
+    if (!process) {
+        return 0;
+    }
+
+    enum bpfbox_action_t action = fs_policy_decision(process, dir, FS_WRITE);
+    audit_fs(process, action, dir, FS_WRITE);
+
+    return action & ACTION_DENY ? -EPERM : 0;
+}
+
 /* A task attempts to create @dentry in @dir */
 LSM_PROBE(inode_mkdir, struct inode *dir, struct dentry *dentry)
 {
