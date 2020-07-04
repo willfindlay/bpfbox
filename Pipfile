@@ -13,6 +13,7 @@ doq = "*"
 python-daemon = "~=2.2.4"
 bpfbox = {editable = true, path = "."}
 netaddr = "*"
+pyparsing = "*"
 
 [requires]
 python_version = "3.8"
