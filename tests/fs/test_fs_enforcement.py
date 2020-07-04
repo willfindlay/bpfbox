@@ -391,6 +391,43 @@ def test_symlink_disallowed(bpf_program: BPFProgram, caplog, setup_testdir):
         subprocess.check_call([OPEN_PATH, 'symlink'])
 
 
+def test_malicious_symlink_cannot_writedir(bpf_program: BPFProgram, caplog, setup_testdir):
+    bpf_program.add_profile(OPEN_PATH, False)
+    bpf_program.add_fs_rule(OPEN_PATH, '/tmp/bpfbox/a', FS_ACCESS.READ, BPFBOX_ACTION.TAINT)
+
+    with pytest.raises(subprocess.CalledProcessError):
+        subprocess.check_call([OPEN_PATH, 'malicious-symlink-read'])
+
+
+def test_malicious_symlink_cannot_addlink(bpf_program: BPFProgram, caplog, setup_testdir):
+    bpf_program.add_profile(OPEN_PATH, False)
+    bpf_program.add_fs_rule(OPEN_PATH, '/tmp/bpfbox/a', FS_ACCESS.READ, BPFBOX_ACTION.TAINT)
+    bpf_program.add_fs_rule(OPEN_PATH, '/tmp/bpfbox', FS_ACCESS.WRITE)
+
+    with pytest.raises(subprocess.CalledProcessError):
+        subprocess.check_call([OPEN_PATH, 'malicious-symlink-read'])
+
+
+def test_malicious_symlink_cannot_read_original(bpf_program: BPFProgram, caplog, setup_testdir):
+    bpf_program.add_profile(OPEN_PATH, False)
+    bpf_program.add_fs_rule(OPEN_PATH, '/tmp/bpfbox/a', FS_ACCESS.READ, BPFBOX_ACTION.TAINT)
+    bpf_program.add_fs_rule(OPEN_PATH, '/tmp/bpfbox', FS_ACCESS.WRITE)
+    bpf_program.add_fs_rule(OPEN_PATH, '/tmp/bpfbox/a', FS_ACCESS.ADD_LINK)
+
+    with pytest.raises(subprocess.CalledProcessError):
+        subprocess.check_call([OPEN_PATH, 'malicious-symlink-read'])
+
+
+def test_non_malicious_symlink_can_read_original(bpf_program: BPFProgram, caplog, setup_testdir):
+    bpf_program.add_profile(OPEN_PATH, False)
+    bpf_program.add_fs_rule(OPEN_PATH, '/tmp/bpfbox/a', FS_ACCESS.READ, BPFBOX_ACTION.TAINT)
+    bpf_program.add_fs_rule(OPEN_PATH, '/tmp/bpfbox', FS_ACCESS.WRITE)
+    bpf_program.add_fs_rule(OPEN_PATH, '/tmp/bpfbox/a', FS_ACCESS.ADD_LINK)
+    bpf_program.add_fs_rule(OPEN_PATH, '/tmp/bpfbox/a', FS_ACCESS.READ)
+
+    subprocess.check_call([OPEN_PATH, 'malicious-symlink-read'])
+
+
 @pytest.mark.skipif(not which('exa'), reason='exa not found on system')
 def test_exa(bpf_program: BPFProgram, caplog, setup_testdir):
     exa = which('exa')

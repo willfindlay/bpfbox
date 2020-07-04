@@ -129,9 +129,10 @@ void symlink_or_die(const char *old, const char *new)
 {
     int rc = symlink(old, new);
 
-    if (rc < 0 && errno == EPERM) {
+    if (rc < 0) {
         fprintf(stderr, "symlink(%s, %s) failed with %d\n", old, new, rc);
-        exit(1);
+        if (errno == EPERM)
+            exit(1);
     }
 }
 
@@ -255,41 +256,42 @@ int main(int argc, char **argv)
 
     if (!strcmp(argv[1], "chown-a")) {
         chown_or_die("/tmp/bpfbox/a", 0, 0);
-        close(fd);
     }
 
     if (!strcmp(argv[1], "create-file")) {
         fd = creat_or_die("/tmp/bpfbox/e", 0);
-        close(fd);
     }
 
     if (!strcmp(argv[1], "create-dir")) {
         mkdir_or_die("/tmp/bpfbox/f", 0);
-        close(fd);
     }
 
     if (!strcmp(argv[1], "rmdir")) {
         rmdir_or_die("/tmp/bpfbox/e");
-        close(fd);
     }
 
     if (!strcmp(argv[1], "unlink")) {
         unlink_or_die("/tmp/bpfbox/e");
-        close(fd);
     }
 
     if (!strcmp(argv[1], "link")) {
         link_or_die("/tmp/bpfbox/a", "/tmp/bpfbox/e");
-        close(fd);
     }
 
     if (!strcmp(argv[1], "rename")) {
         rename_or_die("/tmp/bpfbox/a", "/tmp/bpfbox/new_dir/a");
-        close(fd);
     }
 
     if (!strcmp(argv[1], "symlink")) {
         symlink_or_die("/tmp/bpfbox/a", "/tmp/bpfbox/e");
+    }
+
+    if (!strcmp(argv[1], "malicious-symlink-read")) {
+        symlink_or_die("/tmp/bpfbox/a", "/tmp/bpfbox/e");
+        fd = open_or_die("/tmp/bpfbox/e", O_RDONLY);
+        char buf[256];
+        read(fd, buf, 255);
+        fprintf(stderr, "read: %s\n", buf);
         close(fd);
     }
 
