@@ -21,46 +21,49 @@
 """
 
 from pprint import pprint
-from pyparsing import Word, Literal, Forward, Group, ZeroOrMore, Keyword, OneOrMore, alphas
+from pyparsing import Word, Literal, Forward, Group, ZeroOrMore, Keyword, OneOrMore, QuotedString
 
-keywords = ()
+comma = Literal(',').suppress()
 
 def macro():
     begin = Literal('#[').suppress()
     end = Literal(']').suppress()
     macro_keywords = (
-            Keyword('start') |
-            Keyword('on')
+            Keyword('start on')
             )
-    expr = Forward()
-    expr << Group(begin + OneOrMore(macro_keywords) + end)
+    expr = begin + OneOrMore(macro_keywords) + end
     return expr
 
-def rule():
-    # TODO implement actual rules
-    return Keyword('rule')
+def fs_rule():
+    begin = Literal('fs(').suppress()
+    end = Literal(')').suppress()
+    pathname = QuotedString('"') | QuotedString("'")
+    access = Word('rwaxligsd')
+    expr = Group(begin + pathname('pathname') + comma + access('access') + end)
+    return expr
 
 def block():
     begin = Literal('{').suppress()
     end = Literal('}').suppress()
-    expr = Forward()
-    expr << Group(OneOrMore(macro()) + begin + ZeroOrMore(rule()) + end)
+    expr = Group(OneOrMore(macro())('macros') + Group(begin + ZeroOrMore(fs_rule())('fs') + end)('rules'))
     return expr
 
-text = """
-#[start on] {
-    rule
-    rule
-    rule
-    rule
-}
+if __name__ == '__main__':
+    text = """
+    #[start on] {
+        fs('/usr/lib/testificate', rwx)
+        fs('/usr/lib/foo', rwx)
+        fs('/usr/lib/bar', rwxl)
+        fs('/usr/lib/qux', ax)
+    }
+    """
 
-#[start on] {
-    rule
-    rule
-    rule
-    rule
-}
-"""
+    pprint(OneOrMore(block()).parseString(text).asDict())
 
-pprint(OneOrMore(block()).parseString(text).asList())
+    #text = """
+    #    fs('/usr/lib/testificate', rwx)
+    #    fs('/usr/lib/foo', rwx)
+    #    fs('/usr/lib/bar', rwxl)
+    #    fs('/usr/lib/qux', ax)
+    #"""
+    #pprint(OneOrMore(fs_rule()).parseString(text).asDict())

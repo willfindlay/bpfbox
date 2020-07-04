@@ -15,9 +15,9 @@
     You should have received a copy of the GNU General Public License
     along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
-    Tests bpfbox's filesystem policy enforcement.
+    Tests bpfbox's policy DSL and policy generation therein.
 
-    2020-Jun-30  William Findlay  Created this.
+    2020-Jul-04  William Findlay  Created this.
 """
 
 import subprocess
