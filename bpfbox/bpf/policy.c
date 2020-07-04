@@ -264,6 +264,37 @@ LSM_PROBE(inode_permission, struct inode *inode, int mask)
     return action & ACTION_DENY ? -EPERM : 0;
 }
 
+/* A task tries to read link @dentry */
+LSM_PROBE(inode_readlink, struct dentry *dentry)
+{
+    struct bpfbox_process_t *process = get_current_process();
+    if (!process) {
+        return 0;
+    }
+
+    struct inode *inode = dentry->d_inode;
+
+    enum bpfbox_action_t action = fs_policy_decision(process, inode, FS_READ);
+    audit_fs(process, action, inode, FS_READ);
+
+    return action & ACTION_DENY ? -EPERM : 0;
+}
+
+/* A task tries to follow link @dentry (whose inode is @inode) */
+// FIXME: this is breaking unit tests
+// LSM_PROBE(inode_follow_link, struct dentry *dentry, struct inode *inode)
+//{
+//    struct bpfbox_process_t *process = get_current_process();
+//    if (!process) {
+//        return 0;
+//    }
+//
+//    enum bpfbox_action_t action = fs_policy_decision(process, inode, FS_READ);
+//    audit_fs(process, action, inode, FS_READ);
+//
+//    return action & ACTION_DENY ? -EPERM : 0;
+//}
+
 /* A task attempts to create @dentry in @dir */
 LSM_PROBE(inode_create, struct inode *dir, struct dentry *dentry)
 {
