@@ -264,6 +264,37 @@ LSM_PROBE(inode_permission, struct inode *inode, int mask)
     return action & ACTION_DENY ? -EPERM : 0;
 }
 
+/* A task tries to read link @dentry */
+LSM_PROBE(inode_readlink, struct dentry *dentry)
+{
+    struct bpfbox_process_t *process = get_current_process();
+    if (!process) {
+        return 0;
+    }
+
+    struct inode *inode = dentry->d_inode;
+
+    enum bpfbox_action_t action = fs_policy_decision(process, inode, FS_READ);
+    audit_fs(process, action, inode, FS_READ);
+
+    return action & ACTION_DENY ? -EPERM : 0;
+}
+
+/* A task tries to follow link @dentry (whose inode is @inode) */
+// FIXME: this is breaking unit tests
+// LSM_PROBE(inode_follow_link, struct dentry *dentry, struct inode *inode)
+//{
+//    struct bpfbox_process_t *process = get_current_process();
+//    if (!process) {
+//        return 0;
+//    }
+//
+//    enum bpfbox_action_t action = fs_policy_decision(process, inode, FS_READ);
+//    audit_fs(process, action, inode, FS_READ);
+//
+//    return action & ACTION_DENY ? -EPERM : 0;
+//}
+
 /* A task attempts to create @dentry in @dir */
 LSM_PROBE(inode_create, struct inode *dir, struct dentry *dentry)
 {
@@ -277,6 +308,20 @@ LSM_PROBE(inode_create, struct inode *dir, struct dentry *dentry)
 
     // FIXME: if it's a temporary file, perhaps we should implicitly allow this
     // profile to open it in the future?
+
+    return action & ACTION_DENY ? -EPERM : 0;
+}
+
+/* A task attempts to create a symbolic link @dentry in @dir */
+LSM_PROBE(inode_symlink, struct inode *dir, struct dentry *dentry)
+{
+    struct bpfbox_process_t *process = get_current_process();
+    if (!process) {
+        return 0;
+    }
+
+    enum bpfbox_action_t action = fs_policy_decision(process, dir, FS_WRITE);
+    audit_fs(process, action, dir, FS_WRITE);
 
     return action & ACTION_DENY ? -EPERM : 0;
 }
@@ -361,6 +406,41 @@ LSM_PROBE(inode_link, struct dentry *old_dentry, struct inode *dir,
 
     action = fs_policy_decision(process, old_inode, FS_ADD_LINK);
     audit_fs(process, action, old_inode, FS_ADD_LINK);
+
+    return action & ACTION_DENY ? -EPERM : 0;
+
+    // FIXME: perhaps we should implcitly grant same permissions to new link?
+}
+
+/* A task attempts to rename @old_dir/@old_dentry to @new_dir/@new_dentry */
+LSM_PROBE(inode_rename, struct inode *old_dir, struct dentry *old_dentry,
+          struct inode *new_dir, struct dentry *new_dentry)
+{
+    struct bpfbox_process_t *process = get_current_process();
+    if (!process) {
+        return 0;
+    }
+
+    enum bpfbox_action_t action =
+        fs_policy_decision(process, old_dir, FS_WRITE);
+    audit_fs(process, action, old_dir, FS_WRITE);
+    if (action & ACTION_DENY) {
+        return -EPERM;
+    }
+
+    struct inode *old_inode = old_dentry->d_inode;
+
+    action = fs_policy_decision(process, old_inode, FS_RM);
+    audit_fs(process, action, old_inode, FS_RM);
+    if (action & ACTION_DENY) {
+        return -EPERM;
+    }
+
+    action = fs_policy_decision(process, new_dir, FS_WRITE);
+    audit_fs(process, action, new_dir, FS_WRITE);
+    if (action & ACTION_DENY) {
+        return -EPERM;
+    }
 
     return action & ACTION_DENY ? -EPERM : 0;
 

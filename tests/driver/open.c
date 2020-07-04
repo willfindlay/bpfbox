@@ -115,6 +115,26 @@ void link_or_die(const char *old, const char *new)
     }
 }
 
+void rename_or_die(const char *old, const char *new)
+{
+    int rc = rename(old, new);
+
+    if (rc < 0 && errno == EPERM) {
+        fprintf(stderr, "rename(%s, %s) failed with %d\n", old, new, rc);
+        exit(1);
+    }
+}
+
+void symlink_or_die(const char *old, const char *new)
+{
+    int rc = symlink(old, new);
+
+    if (rc < 0 && errno == EPERM) {
+        fprintf(stderr, "symlink(%s, %s) failed with %d\n", old, new, rc);
+        exit(1);
+    }
+}
+
 int main(int argc, char **argv)
 {
     int fd;
@@ -260,6 +280,16 @@ int main(int argc, char **argv)
 
     if (!strcmp(argv[1], "link")) {
         link_or_die("/tmp/bpfbox/a", "/tmp/bpfbox/e");
+        close(fd);
+    }
+
+    if (!strcmp(argv[1], "rename")) {
+        rename_or_die("/tmp/bpfbox/a", "/tmp/bpfbox/new_dir/a");
+        close(fd);
+    }
+
+    if (!strcmp(argv[1], "symlink")) {
+        symlink_or_die("/tmp/bpfbox/a", "/tmp/bpfbox/e");
         close(fd);
     }
 
