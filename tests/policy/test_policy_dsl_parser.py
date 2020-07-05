@@ -245,24 +245,24 @@ def test_policy_smoke():
     assert len(parsed['blocks'][0]['rules']) == 4
 
     # Correct first block contents
-    assert {'pathname': '/usr/lib/test', 'access': 'rwx'} in parsed['blocks'][0]['rules']
-    assert {'pathname': '/usr/lib/foo', 'access': 'rwx'} in parsed['blocks'][0]['rules']
-    assert {'pathname': '/usr/lib/bar', 'macros': ['allow'], 'access': 'rwxl'} in parsed['blocks'][0]['rules']
-    assert {'pathname': '/usr/lib/qux', 'access': 'ax'} in parsed['blocks'][0]['rules']
+    assert {'type': 'fs', 'pathname': '/usr/lib/test', 'access': 'rwx'} in parsed['blocks'][0]['rules']
+    assert {'type': 'fs', 'pathname': '/usr/lib/foo', 'access': 'rwx'} in parsed['blocks'][0]['rules']
+    assert {'type': 'fs', 'pathname': '/usr/lib/bar', 'macros': ['allow'], 'access': 'rwxl'} in parsed['blocks'][0]['rules']
+    assert {'type': 'fs', 'pathname': '/usr/lib/qux', 'access': 'ax'} in parsed['blocks'][0]['rules']
 
     # Second block
     assert parsed['blocks'][1]['macros'] == ['allow', 'audit', 'taint']
     assert len(parsed['blocks'][1]['rules']) == 2
 
     # Correct second block contents
-    assert {'pathname': '/var/lib/hello', 'access': 'rwx'} in parsed['blocks'][1]['rules']
-    assert {'pathname': '/var/lib/goodbye', 'access': 'rwx'} in parsed['blocks'][1]['rules']
+    assert {'type': 'fs', 'pathname': '/var/lib/hello', 'access': 'rwx'} in parsed['blocks'][1]['rules']
+    assert {'type': 'fs', 'pathname': '/var/lib/goodbye', 'access': 'rwx'} in parsed['blocks'][1]['rules']
 
     # Correct number of rules
     assert len(parsed['rules']) == 4
 
     # Correct rule contents
-    assert {'pathname': '/usr/lib/baz', 'access': 'r'} in parsed['rules']
-    assert {'pathname': '/usr/lib/test', 'macros': ['audit'], 'access': 'rwx'} in parsed['rules']
-    assert {'pathname': '/usr/lib/foo', 'access': 'rwx'} in parsed['rules']
-    assert {'pathname': '/usr/lib/bar', 'access': 'rwxl'} in parsed['rules']
+    assert {'type': 'fs', 'pathname': '/usr/lib/baz', 'access': 'r'} in parsed['rules']
+    assert {'type': 'fs', 'pathname': '/usr/lib/test', 'macros': ['audit'], 'access': 'rwx'} in parsed['rules']
+    assert {'type': 'fs', 'pathname': '/usr/lib/foo', 'access': 'rwx'} in parsed['rules']
+    assert {'type': 'fs', 'pathname': '/usr/lib/bar', 'access': 'rwxl'} in parsed['rules']

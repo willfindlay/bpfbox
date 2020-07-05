@@ -33,12 +33,14 @@ from pprint import pprint
 comma = Literal(',').suppress()
 quoted_string = (QuotedString('"') | QuotedString("'"))
 comment = QuotedString(quoteChar='/*', endQuoteChar='*/', multiline=True).suppress()
+lparen = Literal('(').suppress()
+rparen = Literal(')').suppress()
 
 class Parser:
     def __init__(self):
         self.bnf = self.make_bnf()
 
-    def make_bnf(self) -> 'BNF':
+    def make_bnf(self) -> ParserElement:
         # Special required macro for profile
         profile_macro = Literal('#![').suppress() + Keyword('profile').suppress() + \
                 quoted_string('profile') +  Literal(']').suppress() + LineEnd().suppress()
@@ -54,6 +56,9 @@ class Parser:
     def parse_profile_text(self, profile_text: str) -> Dict:
         return self.bnf.parseString(profile_text).asDict()
 
+    def parse_profile_file(self, profile_file: str) -> Dict:
+        return self.bnf.parseFile(profile_file).asDict()
+
     def _macro_contents(self):
         taint = Keyword('taint')
         allow = Keyword('allow')
@@ -67,15 +72,21 @@ class Parser:
         return Literal('#[').suppress() + macro_contents + Literal(']').suppress()
 
     def _fs_rule(self):
-        begin = Literal('fs(').suppress()
-        end = Literal(')').suppress()
+        rule_type = Literal('fs')('type')
         pathname = quoted_string
         access = Word('rwaxligsu')
-        return Group(ZeroOrMore(self._macro())('macros') + begin + pathname('pathname') + comma + access('access') + end)
+        return rule_type + lparen + pathname('pathname') + comma + access('access') + rparen
+
+    def _procfs_rule(self):
+        rule_type = Literal('proc')('type')
+        pathname = quoted_string
+        return rule_type + lparen + pathname('pathname') + rparen
 
     def _rule(self):
         fs_rule = self._fs_rule()
-        return (fs_rule)
+        procfs_rule = self._procfs_rule()
+        # TODO add more rule types here
+        return Group(ZeroOrMore(self._macro())('macros') + (fs_rule | procfs_rule))
 
     def _block(self):
         begin = Literal('{').suppress()
