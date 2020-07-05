@@ -21,17 +21,25 @@
 """
 
 import pytest
-from pyparsing import ParseException
+from pyparsing import ParseException, Group
 from bpfbox.dsl import Parser
+from pprint import pprint
 
 parser = Parser()
+
 
 def test_macro_smoke():
     macro = parser._macro()
 
-    macro.parseString('#[allow]', True)
-    macro.parseString('#[taint]', True)
-    macro.parseString('#[audit]', True)
+    parsed = macro.parseString('#[allow]', True)
+    assert parsed.asList() == ['allow']
+
+    parsed = macro.parseString('#[taint]', True)
+    assert parsed.asList() == ['taint']
+
+    parsed = macro.parseString('#[audit]', True)
+    assert parsed.asList() == ['audit']
+
 
 def test_bad_macro_syntax_smoke():
     macro = parser._macro()
@@ -66,12 +74,22 @@ def test_bad_macro_syntax_smoke():
     with pytest.raises(ParseException):
         macro.parseString('allow', True)
 
-def test_rule_smoke():
-    rule = parser._rule()
 
-    rule.parseString('fs("/usr/lib/test", rwx)', True)
-    rule.parseString('fs(\'/usr/lib/test\', rwx)', True)
-    rule.parseString('fs("/usr/lib/test", rwxlaigsd)', True)
+def test_rule_smoke():
+    rule = parser._rule()('rule')
+
+    parsed = rule.parseString('fs("/usr/lib/test", rwx)', True)
+    assert parsed.rule.pathname == '/usr/lib/test'
+    assert parsed.rule.access == 'rwx'
+
+    parsed = rule.parseString('fs(\'/usr/lib/test\', rwx)', True)
+    assert parsed.rule.pathname == '/usr/lib/test'
+    assert parsed.rule.access == 'rwx'
+
+    parsed = rule.parseString('fs("/usr/lib/test", rwxlaigsu)', True)
+    assert parsed.rule.pathname == '/usr/lib/test'
+    assert parsed.rule.access == 'rwxlaigsu'
+
 
 def test_bad_rule_syntax_smoke():
     rule = parser._rule()
@@ -90,6 +108,7 @@ def test_bad_rule_syntax_smoke():
 
     with pytest.raises(ParseException):
         rule.parseString('ffs("/usr/lib/test, rwx)', True)
+
 
 def test_block_smoke():
     block = parser._block()
@@ -127,6 +146,7 @@ def test_block_smoke():
     }
     """
     block.parseString(text, True)
+
 
 def test_bad_block_syntax_smoke():
     block = parser._block()
@@ -167,3 +187,82 @@ def test_bad_block_syntax_smoke():
     """
     with pytest.raises(ParseException):
         block.parseString(text, True)
+
+
+def test_policy_smoke():
+    text = """
+    /* This is the profile name */
+    #![profile '/usr/bin/ls']
+
+    /* This is a block of taint rules */
+    #[taint] {
+        fs('/usr/lib/test', rwx)
+        fs('/usr/lib/foo', rwx)
+        #[allow]
+        fs('/usr/lib/bar', rwxl)
+        fs('/usr/lib/qux', ax)
+    }
+
+    /* This
+       is
+       a
+       silly
+       example
+       of
+       a
+       multiline
+       comment */
+
+    /* A lone rule, without a macro */
+    fs('/usr/lib/baz', r)
+
+    #[allow]
+    #[audit]
+    #[taint] {
+        fs('/var/lib/hello', rwx)
+        fs('/var/lib/goodbye', rwx)
+    }
+
+    /* Since this is not a block, this macro applies
+       only to the rule immediately following it. */
+    #[audit]
+    fs('/usr/lib/test', rwx)
+    /* These rules have no macros */
+    fs('/usr/lib/foo', rwx)
+    fs('/usr/lib/bar', rwxl)
+    """
+    parsed = parser.parse_profile_text(text)
+    pprint(parsed)
+
+    # Profile
+    assert parsed['profile'] == '/usr/bin/ls'
+
+    # Correct number of blocks
+    assert len(parsed['blocks']) == 2
+
+    # First block
+    assert parsed['blocks'][0]['macros'] == ['taint']
+    assert len(parsed['blocks'][0]['rules']) == 4
+
+    # Correct first block contents
+    assert {'pathname': '/usr/lib/test', 'access': 'rwx'} in parsed['blocks'][0]['rules']
+    assert {'pathname': '/usr/lib/foo', 'access': 'rwx'} in parsed['blocks'][0]['rules']
+    assert {'pathname': '/usr/lib/bar', 'macros': ['allow'], 'access': 'rwxl'} in parsed['blocks'][0]['rules']
+    assert {'pathname': '/usr/lib/qux', 'access': 'ax'} in parsed['blocks'][0]['rules']
+
+    # Second block
+    assert parsed['blocks'][1]['macros'] == ['allow', 'audit', 'taint']
+    assert len(parsed['blocks'][1]['rules']) == 2
+
+    # Correct second block contents
+    assert {'pathname': '/var/lib/hello', 'access': 'rwx'} in parsed['blocks'][1]['rules']
+    assert {'pathname': '/var/lib/goodbye', 'access': 'rwx'} in parsed['blocks'][1]['rules']
+
+    # Correct number of rules
+    assert len(parsed['rules']) == 4
+
+    # Correct rule contents
+    assert {'pathname': '/usr/lib/baz', 'access': 'r'} in parsed['rules']
+    assert {'pathname': '/usr/lib/test', 'macros': ['audit'], 'access': 'rwx'} in parsed['rules']
+    assert {'pathname': '/usr/lib/foo', 'access': 'rwx'} in parsed['rules']
+    assert {'pathname': '/usr/lib/bar', 'access': 'rwxl'} in parsed['rules']
