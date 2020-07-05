@@ -20,50 +20,86 @@
     2020-Jul-04  William Findlay  Created this.
 """
 
+from bpfbox.bpf_program import BPFProgram
+
+from pyparsing import *
+
 from pprint import pprint
-from pyparsing import Word, Literal, Forward, Group, ZeroOrMore, Keyword, OneOrMore, QuotedString
+
+#class RuleGenerator:
+#    @staticmethod
+#    generate_profile(bpf, text):
 
 comma = Literal(',').suppress()
+quoted_string = (QuotedString('"') | QuotedString("'"))
 
-def macro():
-    begin = Literal('#[').suppress()
-    end = Literal(']').suppress()
-    macro_keywords = (
-            Keyword('start on')
-            )
-    expr = begin + OneOrMore(macro_keywords) + end
-    return expr
+class Parser:
+    def __init__(self):
+        self.bnf = self.make_bnf()
 
-def fs_rule():
-    begin = Literal('fs(').suppress()
-    end = Literal(')').suppress()
-    pathname = QuotedString('"') | QuotedString("'")
-    access = Word('rwaxligsd')
-    expr = Group(begin + pathname('pathname') + comma + access('access') + end)
-    return expr
+    def make_bnf(self) -> 'BNF':
+        # Special required macro for profile
+        profile_macro = Literal('#[').suppress() + Keyword('profile').suppress() + \
+                quoted_string('profile') +  Literal(']').suppress() + LineEnd().suppress()
 
-def block():
-    begin = Literal('{').suppress()
-    end = Literal('}').suppress()
-    expr = Group(OneOrMore(macro())('macros') + Group(begin + ZeroOrMore(fs_rule())('fs') + end)('rules'))
-    return expr
+        # Rules
+        rule = self._rule()
+
+        # Blocks
+        block = self._block()
+
+        return profile_macro & ZeroOrMore(block)('blocks') & ZeroOrMore(rule)('rules')
+
+    def parse_profile_text(self, profile_text: str) -> Dict:
+        return self.bnf.parseString(profile_text)
+
+    def _macro_contents(self):
+        taint_macro = Keyword('taint')
+        allow_macro = Keyword('allow')
+        audit_macro = Keyword('audit')
+        return (
+                allow_macro | taint_macro | audit_macro
+                )
+
+    def _macro(self):
+        macro_contents = self._macro_contents()
+        return Literal('#[').suppress() + macro_contents + Literal(']').suppress()
+
+    def _profile_macro(self):
+        return
+
+    def _fs_rule(self):
+        begin = Literal('fs(').suppress()
+        end = Literal(')').suppress()
+        pathname = quoted_string
+        access = Word('rwaxligsd')
+        return Group(ZeroOrMore(self._macro())('macros') + begin + pathname('pathname') + comma + access('access') + end)
+
+    def _rule(self):
+        fs_rule = self._fs_rule()
+        return (fs_rule)
+
+    def _block(self):
+        begin = Literal('{').suppress()
+        end = Literal('}').suppress()
+        return Group(OneOrMore(self._macro())('macros') + Group(begin + ZeroOrMore(self._rule()) + end)('rules'))
 
 if __name__ == '__main__':
+    parser = Parser()
     text = """
-    #[start on] {
-        fs('/usr/lib/testificate', rwx)
+    #[profile '/usr/bin/ls']
+
+    #[taint] {
+        fs('/usr/lib/test', rwx)
         fs('/usr/lib/foo', rwx)
         fs('/usr/lib/bar', rwxl)
         fs('/usr/lib/qux', ax)
     }
+
+    #[allow]
+    fs('/usr/lib/test', rwx)
+    fs('/usr/lib/foo', rwx)
+    fs('/usr/lib/bar', rwxl)
+    fs('/usr/lib/qux', ax)
     """
-
-    pprint(OneOrMore(block()).parseString(text).asDict())
-
-    #text = """
-    #    fs('/usr/lib/testificate', rwx)
-    #    fs('/usr/lib/foo', rwx)
-    #    fs('/usr/lib/bar', rwxl)
-    #    fs('/usr/lib/qux', ax)
-    #"""
-    #pprint(OneOrMore(fs_rule()).parseString(text).asDict())
+    pprint(parser.parse_profile_text(text).asDict())
