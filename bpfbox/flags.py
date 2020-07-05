@@ -29,6 +29,10 @@
 
 from enum import Enum, unique, _decompose, Flag as _Flag
 
+from bpfbox.logger import get_logger
+
+logger = get_logger()
+
 
 class Flag(_Flag):
     """
@@ -55,6 +59,21 @@ class BPFBOX_ACTION(Flag):
     DENY     = 0x00000008
     COMPLAIN = 0x00000010
 
+    @staticmethod
+    def from_string(s: str):
+        action_map = {
+            'taint': BPFBOX_ACTION.TAINT,
+            'allow': BPFBOX_ACTION.ALLOW,
+            'audit': BPFBOX_ACTION.AUDIT,
+        }
+        action = BPFBOX_ACTION.NONE
+        for ell in s:
+            try:
+                action |= action_map[ell]
+            except:
+                logger.warning('Unknown action "%s"' % (ell))
+        return action
+
 
 @unique
 class FS_ACCESS(Flag):
@@ -68,3 +87,26 @@ class FS_ACCESS(Flag):
     IOCTL = 0x00000040
     RM = 0x00000080
     ADD_LINK = 0x00000100
+
+    @staticmethod
+    def from_string(s: str):
+        access_map = {
+            'r': FS_ACCESS.READ,
+            'w': FS_ACCESS.WRITE,
+            'a': FS_ACCESS.APPEND,
+            'x': FS_ACCESS.EXEC,
+            'l': FS_ACCESS.ADD_LINK,
+            'i': FS_ACCESS.IOCTL,
+            'g': FS_ACCESS.GETATTR,
+            's': FS_ACCESS.SETATTR,
+            'u': FS_ACCESS.RM
+        }
+        access = FS_ACCESS.NONE
+        for ell in s:
+            try:
+                access |= access_map[ell]
+            except:
+                logger.warning('Unknown access "%s"' % (ell))
+        return access
+
+

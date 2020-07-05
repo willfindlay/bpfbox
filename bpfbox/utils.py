@@ -28,8 +28,6 @@ import itertools
 import signal
 import subprocess
 
-from bpfbox.flags import BPFBOX_ACTION
-
 
 def get_inode_and_device(path, follow_symlink=True):
     """

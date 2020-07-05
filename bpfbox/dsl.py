@@ -20,15 +20,13 @@
     2020-Jul-04  William Findlay  Created this.
 """
 
-from bpfbox.bpf_program import BPFProgram
-
 from pyparsing import *
 
-from pprint import pprint
+from bpfbox.bpf_program import BPFProgram
+from bpfbox.logger import get_logger
+from bpfbox.flags import BPFBOX_ACTION, FS_ACCESS
 
-#class RuleGenerator:
-#    @staticmethod
-#    generate_profile(bpf, text):
+logger = get_logger()
 
 comma = Literal(',').suppress()
 quoted_string = (QuotedString('"') | QuotedString("'"))
@@ -36,11 +34,23 @@ comment = QuotedString(quoteChar='/*', endQuoteChar='*/', multiline=True).suppre
 lparen = Literal('(').suppress()
 rparen = Literal(')').suppress()
 
-class Parser:
-    def __init__(self):
-        self.bnf = self.make_bnf()
 
-    def make_bnf(self) -> ParserElement:
+class PolicyGenerator:
+    def __init__(self, bpf_program: BPFProgram):
+        self.bpf_program = bpf_program
+        self.bnf = self._make_bnf()
+
+    def parse_profile_text(self, profile_text: str) -> Dict:
+        try:
+            return self.bnf.parseString(profile_text, True).asDict()
+        except ParseException as pe:
+            logger.error('Unable to parse profile:')
+            logger.error("    " + pe.line)
+            logger.error("    " + " " * (pe.column - 1) + "^")
+            logger.error("    %s" % (pe))
+            raise pe
+
+    def _make_bnf(self) -> ParserElement:
         # Special required macro for profile
         profile_macro = Literal('#![').suppress() + Keyword('profile').suppress() + \
                 quoted_string('profile') +  Literal(']').suppress() + LineEnd().suppress()
@@ -53,19 +63,11 @@ class Parser:
 
         return profile_macro & ZeroOrMore((rule('rules*') | block('blocks*') | comment))
 
-    def parse_profile_text(self, profile_text: str) -> Dict:
-        return self.bnf.parseString(profile_text).asDict()
-
-    def parse_profile_file(self, profile_file: str) -> Dict:
-        return self.bnf.parseFile(profile_file).asDict()
-
     def _macro_contents(self):
         taint = Keyword('taint')
         allow = Keyword('allow')
         audit = Keyword('audit')
-        return (
-                allow | taint | audit
-                )
+        return (allow | taint | audit)
 
     def _macro(self):
         macro_contents = self._macro_contents()
@@ -92,23 +94,3 @@ class Parser:
         begin = Literal('{').suppress()
         end = Literal('}').suppress()
         return Group(ZeroOrMore(self._macro())('macros') + Group(begin + ZeroOrMore(self._rule()) + end)('rules'))
-
-if __name__ == '__main__':
-    parser = Parser()
-    text = """
-    #[profile '/usr/bin/ls']
-
-    #[taint] {
-        fs('/usr/lib/test', rwx)
-        fs('/usr/lib/foo', rwx)
-        fs('/usr/lib/bar', rwxl)
-        fs('/usr/lib/qux', ax)
-    }
-
-    #[allow]
-    fs('/usr/lib/test', rwx)
-    fs('/usr/lib/foo', rwx)
-    fs('/usr/lib/bar', rwxl)
-    fs('/usr/lib/qux', ax)
-    """
-    pprint(parser.parse_profile_text(text))

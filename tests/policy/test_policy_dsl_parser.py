@@ -22,11 +22,10 @@
 
 import pytest
 from pyparsing import ParseException, Group
-from bpfbox.dsl import Parser
+from bpfbox.dsl import PolicyGenerator
 from pprint import pprint
 
-parser = Parser()
-
+parser = PolicyGenerator(None)
 
 def test_macro_smoke():
     macro = parser._macro()
@@ -266,3 +265,53 @@ def test_policy_smoke():
     assert {'type': 'fs', 'pathname': '/usr/lib/test', 'macros': ['audit'], 'access': 'rwx'} in parsed['rules']
     assert {'type': 'fs', 'pathname': '/usr/lib/foo', 'access': 'rwx'} in parsed['rules']
     assert {'type': 'fs', 'pathname': '/usr/lib/bar', 'access': 'rwxl'} in parsed['rules']
+
+def test_bad_policy_syntax_smoke():
+    text = """
+    #![profile '/usr/bin/ls']
+    #![profile '/usr/bin/ls']
+    """
+    with pytest.raises(ParseException):
+        parser.parse_profile_text(text)
+
+    text = """
+    #![profile '/usr/bin/ls']
+    /* sdfhsodfhosdifhgosdfho
+    """
+    with pytest.raises(ParseException):
+        parser.parse_profile_text(text)
+
+    text = """
+    /*#![profile '/usr/bin/ls']*/
+    """
+    with pytest.raises(ParseException):
+        parser.parse_profile_text(text)
+
+    text = """
+    """
+    with pytest.raises(ParseException):
+        parser.parse_profile_text(text)
+
+    text = """
+    #![profile '/usr/bin/ls']
+    /* hello /* There */ */
+    """
+    with pytest.raises(ParseException):
+        parser.parse_profile_text(text)
+
+    # We don't support nested blocks right now
+    text = """
+    #![profile '/usr/bin/ls']
+
+    #[allow]
+    #[audit]
+    {
+        fs('/var/log/file.txt', w)
+        #[taint]
+        {
+            fs('/var/log/file.txt', r)
+        }
+    }
+    """
+    with pytest.raises(ParseException):
+        parser.parse_profile_text(text)

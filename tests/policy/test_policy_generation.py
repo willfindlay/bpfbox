@@ -28,18 +28,12 @@ import logging
 import time
 from shutil import rmtree
 
-from bpfbox.argument_parser import parse_args
 from bpfbox.bpf_program import BPFProgram
-from bpfbox.logger import BPFBoxLoggerClass
-from bpfbox.utils import get_inode_and_device, which
-from bpfbox.flags import BPFBOX_ACTION, FS_ACCESS
+from bpfbox.dsl import PolicyGenerator
 from bpfbox import defs
 
 DRIVER_PATH = os.path.join(defs.project_path, 'tests/driver')
 SILLY_PATH = os.path.join(DRIVER_PATH, 'silly_program')
-
-POLICY_PATH = os.path.join(defs.project_path, 'tests/policy')
-SILLY_POLICY_PATH = os.path.join(DRIVER_PATH, 'silly_program.bpfbox')
 
 @pytest.fixture
 def setup_testdir():
@@ -51,8 +45,15 @@ def setup_testdir():
     open('/tmp/bpfbox/d', 'a').close()
     os.chmod('/tmp/bpfbox/d', 0o755)
 
+@pytest.fixture
+def policy_generator(bpf_program: BPFProgram):
+    yield PolicyGenerator(bpf_program)
+
 
 @pytest.mark.xfail(reason='Not yet implemented')
-def test_silly_program_policy_smoke(bpf_program: BPFProgram, caplog, setup_testdir):
-    bpf_program.add_profile(SILLY_PATH, True)
+def test_silly_program_policy_smoke(policy_generator: PolicyGenerator, setup_testdir):
+    text = """
+    #![profile '%s']
+    """ % (SILLY_PATH)
+
     subprocess.check_output([SILLY_PATH])
