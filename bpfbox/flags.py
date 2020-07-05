@@ -49,6 +49,10 @@ class Flag(_Flag):
         else:
             return '|'.join([str(m._name_ or m._value_) for m in members])
 
+    @staticmethod
+    def from_string(s: str):
+        raise NotImplementedError('Flags must implement from_string')
+
 
 @unique
 class BPFBOX_ACTION(Flag):
