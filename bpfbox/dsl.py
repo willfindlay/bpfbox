@@ -32,6 +32,7 @@ from pprint import pprint
 
 comma = Literal(',').suppress()
 quoted_string = (QuotedString('"') | QuotedString("'"))
+comment = QuotedString(quoteChar='/*', endQuoteChar='*/', multiline=True).suppress()
 
 class Parser:
     def __init__(self):
@@ -39,7 +40,7 @@ class Parser:
 
     def make_bnf(self) -> 'BNF':
         # Special required macro for profile
-        profile_macro = Literal('#[').suppress() + Keyword('profile').suppress() + \
+        profile_macro = Literal('#![').suppress() + Keyword('profile').suppress() + \
                 quoted_string('profile') +  Literal(']').suppress() + LineEnd().suppress()
 
         # Rules
@@ -48,17 +49,17 @@ class Parser:
         # Blocks
         block = self._block()
 
-        return profile_macro & ZeroOrMore(block)('blocks') & ZeroOrMore(rule)('rules')
+        return profile_macro & ZeroOrMore((rule('rules*') | block('blocks*') | comment))
 
     def parse_profile_text(self, profile_text: str) -> Dict:
-        return self.bnf.parseString(profile_text)
+        return self.bnf.parseString(profile_text).asDict()
 
     def _macro_contents(self):
-        taint_macro = Keyword('taint')
-        allow_macro = Keyword('allow')
-        audit_macro = Keyword('audit')
+        taint = Keyword('taint')
+        allow = Keyword('allow')
+        audit = Keyword('audit')
         return (
-                allow_macro | taint_macro | audit_macro
+                allow | taint | audit
                 )
 
     def _macro(self):
@@ -69,7 +70,7 @@ class Parser:
         begin = Literal('fs(').suppress()
         end = Literal(')').suppress()
         pathname = quoted_string
-        access = Word('rwaxligsd')
+        access = Word('rwaxligsu')
         return Group(ZeroOrMore(self._macro())('macros') + begin + pathname('pathname') + comma + access('access') + end)
 
     def _rule(self):
@@ -99,4 +100,4 @@ if __name__ == '__main__':
     fs('/usr/lib/bar', rwxl)
     fs('/usr/lib/qux', ax)
     """
-    pprint(parser.parse_profile_text(text).asDict())
+    pprint(parser.parse_profile_text(text))
