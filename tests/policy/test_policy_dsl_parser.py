@@ -22,76 +22,148 @@
 
 import pytest
 from pyparsing import ParseException
-from bpfbox.dsl import macro, fs_rule, block
+from bpfbox.dsl import Parser
 
-def test_valid_macros_smoke(caplog):
-    text = """
-    #[start on]
-    """
-    parsed = macro().parseString(text, True).asList()
-    assert parsed == ['start on']
+parser = Parser()
 
-def test_invalid_macros_smoke(caplog):
-    text = """
-    #[start off]
-    """
+def test_macro_smoke():
+    macro = parser._macro()
+
+    macro.parseString('#[allow]', True)
+    macro.parseString('#[taint]', True)
+    macro.parseString('#[audit]', True)
+
+def test_bad_macro_syntax_smoke():
+    macro = parser._macro()
+
     with pytest.raises(ParseException):
-        macro().parseString(text, True)
+        macro.parseString('#[allow allow]', True)
 
-    text = """
-    #[start on]]
-    """
     with pytest.raises(ParseException):
-        macro().parseString(text, True)
+        macro.parseString('#[allow] #[allow]', True)
 
-    text = """
-    #[[start on]
-    """
     with pytest.raises(ParseException):
-        macro().parseString(text, True)
+        macro.parseString('#allow', True)
 
-    text = """
-    #[start on #[start on]]
-    """
     with pytest.raises(ParseException):
-        macro().parseString(text, True)
+        macro.parseString('[allow]', True)
 
-    text = """
-    #[]
-    """
     with pytest.raises(ParseException):
-        macro().parseString(text, True)
+        macro.parseString('#[allow', True)
 
-    text = """
-    #[start]
-    """
     with pytest.raises(ParseException):
-        macro().parseString(text, True)
+        macro.parseString('allow]', True)
 
-    text = """
-    #[on]
-    """
     with pytest.raises(ParseException):
-        macro().parseString(text, True)
+        macro.parseString('#[[allow]', True)
 
-def test_blocks_smoke(caplog):
+    with pytest.raises(ParseException):
+        macro.parseString('#[allow]]', True)
+
+    with pytest.raises(ParseException):
+        macro.parseString('#[[allow]]', True)
+
+    with pytest.raises(ParseException):
+        macro.parseString('allow', True)
+
+def test_rule_smoke():
+    rule = parser._rule()
+
+    rule.parseString('fs("/usr/lib/test", rwx)', True)
+    rule.parseString('fs(\'/usr/lib/test\', rwx)', True)
+    rule.parseString('fs("/usr/lib/test", rwxlaigsd)', True)
+
+def test_bad_rule_syntax_smoke():
+    rule = parser._rule()
+
+    with pytest.raises(ParseException):
+        rule.parseString('fs("/usr/lib/test, rwx)', True)
+
+    with pytest.raises(ParseException):
+        rule.parseString('fs("/usr/lib/test, rwzzzzzzx)', True)
+
+    with pytest.raises(ParseException):
+        rule.parseString('fs("/usr/lib/test, rw x)', True)
+
+    with pytest.raises(ParseException):
+        rule.parseString('fs("/usr/lib/test, rw, x)', True)
+
+    with pytest.raises(ParseException):
+        rule.parseString('ffs("/usr/lib/test, rwx)', True)
+
+def test_block_smoke():
+    block = parser._block()
+
     text = """
-    #[start on] {
+    {}
+    """
+    block.parseString(text, True)
+
+    text = """
+    #[allow]
+    {
+        fs('/usr/lib/test', rwx)
     }
     """
-    parsed = block().parseString(text, True)
-    assert parsed.macros.asList() == ['start on']
-    with pytest.raises(KeyError):
-        assert parsed['rules']
+    block.parseString(text, True)
 
     text = """
-    #[start on] {
-        fs('/usr/lib/testificate', rwx)
-        fs('/usr/lib/foo', rwx)
-        fs('/usr/lib/bar', rwxl)
-        fs('/usr/lib/qux', ax)
+    #[allow]
+    #[taint]
+    #[audit]
+    {
+        fs('/usr/lib/test', rwx)
     }
     """
-    parsed = block().parseString(text, True)
-    assert parsed.macros.asList() == ['start on']
-    assert parsed.fs_rules.asList() == ['start on']
+    block.parseString(text, True)
+
+    text = """
+    #[allow]
+    #[taint]
+    #[audit]
+    {
+        fs('/usr/lib/test', rwx)
+        fs('/var/log/test', ra)
+    }
+    """
+    block.parseString(text, True)
+
+def test_bad_block_syntax_smoke():
+    block = parser._block()
+
+    text = """
+    {{}
+    """
+    with pytest.raises(ParseException):
+        block.parseString(text, True)
+
+    text = """
+    {
+        fs('/usr/lib/test', rwx)
+    }
+    #[allow]
+    """
+    with pytest.raises(ParseException):
+        block.parseString(text, True)
+
+    text = """
+    #[allow]
+    #[taint]
+    #[audit]
+    {
+        {fs('/usr/lib/test', rwx)}
+    }
+    """
+    with pytest.raises(ParseException):
+        block.parseString(text, True)
+
+    text = """
+    #[allow]
+    #[taint]
+    #[audit]
+        fs('/usr/lib/test', rwx)
+        fs('/var/log/test', ra)
+    }
+    """
+    with pytest.raises(ParseException):
+        block.parseString(text, True)

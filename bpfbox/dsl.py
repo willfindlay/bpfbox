@@ -65,9 +65,6 @@ class Parser:
         macro_contents = self._macro_contents()
         return Literal('#[').suppress() + macro_contents + Literal(']').suppress()
 
-    def _profile_macro(self):
-        return
-
     def _fs_rule(self):
         begin = Literal('fs(').suppress()
         end = Literal(')').suppress()
@@ -82,7 +79,7 @@ class Parser:
     def _block(self):
         begin = Literal('{').suppress()
         end = Literal('}').suppress()
-        return Group(OneOrMore(self._macro())('macros') + Group(begin + ZeroOrMore(self._rule()) + end)('rules'))
+        return Group(ZeroOrMore(self._macro())('macros') + Group(begin + ZeroOrMore(self._rule()) + end)('rules'))
 
 if __name__ == '__main__':
     parser = Parser()
