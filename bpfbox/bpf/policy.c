@@ -651,6 +651,25 @@ RAW_TRACEPOINT_PROBE(sched_process_exit)
  * Uprobes for libbpfbox Operations
  * ========================================================================= */
 
+static __always_inline void add_policy_common(struct bpfbox_policy_t *policy,
+                                              struct bpfbox_profile_t *profile,
+                                              u32 access_mask,
+                                              enum bpfbox_action_t action)
+{
+    if (action & ACTION_TAINT) {
+        profile->taint_on_exec = 0;
+        policy->taint |= access_mask;
+    }
+
+    if (action & ACTION_ALLOW) {
+        policy->allow |= access_mask;
+    }
+
+    if (action & ACTION_AUDIT) {
+        policy->audit |= access_mask;
+    }
+}
+
 int add_profile(struct pt_regs *ctx)
 {
     u64 profile_key = PT_REGS_PARM1(ctx);
@@ -705,17 +724,7 @@ int add_fs_rule(struct pt_regs *ctx)
         return 1;
     }
 
-    if (action & ACTION_TAINT) {
-        policy->taint |= access_mask;
-    }
-
-    if (action & ACTION_ALLOW) {
-        policy->allow |= access_mask;
-    }
-
-    if (action & ACTION_AUDIT) {
-        policy->audit |= access_mask;
-    }
+    add_policy_common(policy, profile, access_mask, action);
 
     return 0;
 }
@@ -724,7 +733,7 @@ int add_procfs_rule(struct pt_regs *ctx)
 {
     u64 subject_profile_key = PT_REGS_PARM1(ctx);
     u64 object_profile_key = PT_REGS_PARM2(ctx);
-    u32 access = PT_REGS_PARM3(ctx);
+    u32 access_mask = PT_REGS_PARM3(ctx);
     enum bpfbox_action_t action = PT_REGS_PARM4(ctx);
 
     if (action & (ACTION_DENY | ACTION_COMPLAIN)) {
@@ -766,17 +775,7 @@ int add_procfs_rule(struct pt_regs *ctx)
         return 1;
     }
 
-    if (action & ACTION_TAINT) {
-        policy->taint |= access;
-    }
-
-    if (action & ACTION_ALLOW) {
-        policy->allow |= access;
-    }
-
-    if (action & ACTION_AUDIT) {
-        policy->audit |= access;
-    }
+    add_policy_common(policy, profile, access_mask, action);
 
     return 0;
 }

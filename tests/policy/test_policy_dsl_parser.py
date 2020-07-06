@@ -22,11 +22,10 @@
 
 import pytest
 from pyparsing import ParseException, Group
-from bpfbox.dsl import Parser
+from bpfbox.dsl import PolicyGenerator
 from pprint import pprint
 
-parser = Parser()
-
+parser = PolicyGenerator(None)
 
 def test_macro_smoke():
     macro = parser._macro()
@@ -231,7 +230,7 @@ def test_policy_smoke():
     fs('/usr/lib/foo', rwx)
     fs('/usr/lib/bar', rwxl)
     """
-    parsed = parser.parse_profile_text(text)
+    parsed = parser._parse_policy_text(text)
     pprint(parsed)
 
     # Profile
@@ -245,24 +244,74 @@ def test_policy_smoke():
     assert len(parsed['blocks'][0]['rules']) == 4
 
     # Correct first block contents
-    assert {'pathname': '/usr/lib/test', 'access': 'rwx'} in parsed['blocks'][0]['rules']
-    assert {'pathname': '/usr/lib/foo', 'access': 'rwx'} in parsed['blocks'][0]['rules']
-    assert {'pathname': '/usr/lib/bar', 'macros': ['allow'], 'access': 'rwxl'} in parsed['blocks'][0]['rules']
-    assert {'pathname': '/usr/lib/qux', 'access': 'ax'} in parsed['blocks'][0]['rules']
+    assert {'type': 'fs', 'pathname': '/usr/lib/test', 'macros': [], 'access': 'rwx'} in parsed['blocks'][0]['rules']
+    assert {'type': 'fs', 'pathname': '/usr/lib/foo', 'macros': [], 'access': 'rwx'} in parsed['blocks'][0]['rules']
+    assert {'type': 'fs', 'pathname': '/usr/lib/bar', 'macros': [], 'macros': ['allow'], 'access': 'rwxl'} in parsed['blocks'][0]['rules']
+    assert {'type': 'fs', 'pathname': '/usr/lib/qux', 'macros': [], 'access': 'ax'} in parsed['blocks'][0]['rules']
 
     # Second block
     assert parsed['blocks'][1]['macros'] == ['allow', 'audit', 'taint']
     assert len(parsed['blocks'][1]['rules']) == 2
 
     # Correct second block contents
-    assert {'pathname': '/var/lib/hello', 'access': 'rwx'} in parsed['blocks'][1]['rules']
-    assert {'pathname': '/var/lib/goodbye', 'access': 'rwx'} in parsed['blocks'][1]['rules']
+    assert {'type': 'fs', 'pathname': '/var/lib/hello', 'macros': [], 'access': 'rwx'} in parsed['blocks'][1]['rules']
+    assert {'type': 'fs', 'pathname': '/var/lib/goodbye', 'macros': [], 'access': 'rwx'} in parsed['blocks'][1]['rules']
 
     # Correct number of rules
     assert len(parsed['rules']) == 4
 
     # Correct rule contents
-    assert {'pathname': '/usr/lib/baz', 'access': 'r'} in parsed['rules']
-    assert {'pathname': '/usr/lib/test', 'macros': ['audit'], 'access': 'rwx'} in parsed['rules']
-    assert {'pathname': '/usr/lib/foo', 'access': 'rwx'} in parsed['rules']
-    assert {'pathname': '/usr/lib/bar', 'access': 'rwxl'} in parsed['rules']
+    assert {'type': 'fs', 'pathname': '/usr/lib/baz', 'macros': [], 'access': 'r'} in parsed['rules']
+    assert {'type': 'fs', 'pathname': '/usr/lib/test', 'macros': ['audit'], 'access': 'rwx'} in parsed['rules']
+    assert {'type': 'fs', 'pathname': '/usr/lib/foo', 'macros': [], 'access': 'rwx'} in parsed['rules']
+    assert {'type': 'fs', 'pathname': '/usr/lib/bar', 'macros': [], 'access': 'rwxl'} in parsed['rules']
+
+def test_bad_policy_syntax_smoke():
+    text = """
+    #![profile '/usr/bin/ls']
+    #![profile '/usr/bin/ls']
+    """
+    with pytest.raises(ParseException):
+        parser._parse_policy_text(text)
+
+    text = """
+    #![profile '/usr/bin/ls']
+    /* sdfhsodfhosdifhgosdfho
+    """
+    with pytest.raises(ParseException):
+        parser._parse_policy_text(text)
+
+    text = """
+    /*#![profile '/usr/bin/ls']*/
+    """
+    with pytest.raises(ParseException):
+        parser._parse_policy_text(text)
+
+    text = """
+    """
+    with pytest.raises(ParseException):
+        parser._parse_policy_text(text)
+
+    text = """
+    #![profile '/usr/bin/ls']
+    /* hello /* There */ */
+    """
+    with pytest.raises(ParseException):
+        parser._parse_policy_text(text)
+
+    # We don't support nested blocks right now
+    text = """
+    #![profile '/usr/bin/ls']
+
+    #[allow]
+    #[audit]
+    {
+        fs('/var/log/file.txt', w)
+        #[taint]
+        {
+            fs('/var/log/file.txt', r)
+        }
+    }
+    """
+    with pytest.raises(ParseException):
+        parser._parse_policy_text(text)

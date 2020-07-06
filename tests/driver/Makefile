@@ -11,8 +11,8 @@ all: $(EXES)
 clean:
 	rm -f $(EXES) *.o
 
-open: open.c
+open: open.c or_die.h
 	$(CC) $(CFLAGS) $(LDFLAGS) -o open open.c
 
-silly_program: silly_program.c
+silly_program: silly_program.c or_die.h
 	$(CC) $(CFLAGS) $(LDFLAGS) -o silly_program silly_program.c
