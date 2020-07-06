@@ -30,6 +30,7 @@ from shutil import rmtree
 
 from bpfbox.bpf_program import BPFProgram
 from bpfbox.dsl import PolicyGenerator
+from bpfbox.utils import which
 from bpfbox import defs
 
 DRIVER_PATH = os.path.join(defs.project_path, 'tests/driver')
@@ -49,17 +50,6 @@ def setup_testdir():
 @pytest.fixture
 def policy_generator(bpf_program: BPFProgram):
     yield PolicyGenerator(bpf_program)
-
-
-def test_silly_program_policy_implicit_taint(policy_generator: PolicyGenerator, setup_testdir):
-    text = """
-    #![profile '%s']
-    """ % (SILLY_PATH)
-
-    policy_generator.process_policy_text(text)
-
-    with pytest.raises(subprocess.CalledProcessError):
-        subprocess.check_output([SILLY_PATH])
 
 
 def test_open_complex_policy_no_execute_permission(policy_generator: PolicyGenerator, setup_testdir):
@@ -121,3 +111,77 @@ def test_open_complex_policy_implicit_allow(policy_generator: PolicyGenerator, s
     policy_generator.process_policy_text(text)
 
     subprocess.check_call([OPEN_PATH, 'complex'])
+
+
+def test_open_link_policy(policy_generator: PolicyGenerator, setup_testdir):
+    text = """
+    #![profile '%s']
+
+    #[taint]
+    fs('/tmp/bpfbox/a', r)
+
+    fs('/tmp/bpfbox', w)
+    fs('/tmp/bpfbox/a', l)
+
+    """ % (OPEN_PATH)
+
+    policy_generator.process_policy_text(text)
+
+    subprocess.check_call([OPEN_PATH, 'link'])
+
+
+def test_open_implicit_taint(policy_generator: PolicyGenerator, setup_testdir):
+    text = """
+    #![profile '%s']
+    """ % (OPEN_PATH)
+
+    policy_generator.process_policy_text(text)
+
+    with pytest.raises(subprocess.CalledProcessError):
+        subprocess.check_output([OPEN_PATH])
+
+
+@pytest.mark.skipif(not which('sleep'), reason='sleep not found on system')
+def test_open_procfs_rules(policy_generator: PolicyGenerator, setup_testdir):
+    sleep_path = which('sleep')
+
+    text = """
+    #![profile '%s']
+
+    #[taint]
+    fs('/tmp/bpfbox/a', r)
+
+    fs('/proc', x)
+    proc('%s', rx)
+    """ % (OPEN_PATH, sleep_path)
+
+    policy_generator.process_policy_text(text)
+
+    # /proc/self should always work
+    subprocess.check_call([OPEN_PATH, 'proc-self'])
+
+    sleep_pid = subprocess.Popen([sleep_path, '10']).pid
+    subprocess.check_call([OPEN_PATH, 'proc-other', str(sleep_pid)])
+
+
+@pytest.mark.skipif(not which('sleep'), reason='sleep not found on system')
+def test_open_proc_other_not_allowed(policy_generator: PolicyGenerator, setup_testdir):
+    sleep_path = which('sleep')
+
+    text = """
+    #![profile '%s']
+
+    #[taint]
+    fs('/tmp/bpfbox/a', r)
+
+    fs('/proc', x)
+    """ % (OPEN_PATH)
+
+    policy_generator.process_policy_text(text)
+
+    # /proc/self should always work
+    subprocess.check_call([OPEN_PATH, 'proc-self'])
+
+    sleep_pid = subprocess.Popen([sleep_path, '10']).pid
+    with pytest.raises(subprocess.CalledProcessError):
+        subprocess.check_call([OPEN_PATH, 'proc-other', str(sleep_pid)])

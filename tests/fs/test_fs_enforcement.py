@@ -161,7 +161,7 @@ def test_procfs(bpf_program: BPFProgram, caplog, setup_testdir):
     subprocess.check_call([OPEN_PATH, 'proc-self'])
 
     with pytest.raises(subprocess.CalledProcessError):
-        subprocess.check_call([OPEN_PATH, 'proc-1'])
+        subprocess.check_call([OPEN_PATH, 'proc-other', '1'])
 
 
 @pytest.mark.skipif(not which('sleep'), reason='sleep not found on system')
@@ -170,14 +170,27 @@ def test_procfs_other_process(bpf_program: BPFProgram, caplog, setup_testdir):
     bpf_program.add_profile(OPEN_PATH, False)
     bpf_program.add_fs_rule(OPEN_PATH, '/tmp/bpfbox/a', FS_ACCESS.READ, BPFBOX_ACTION.TAINT)
     bpf_program.add_fs_rule(OPEN_PATH, '/proc', FS_ACCESS.EXEC)
-    bpf_program.add_procfs_rule(OPEN_PATH, sleep_path, FS_ACCESS.READ)
+    bpf_program.add_procfs_rule(OPEN_PATH, sleep_path, FS_ACCESS.READ | FS_ACCESS.EXEC)
 
     subprocess.check_call([OPEN_PATH, 'proc-self'])
 
-    # for some reason Popen's pid is always off by 1
-    sleep_pid = subprocess.Popen([sleep_path, '10']).pid + 1
+    sleep_pid = subprocess.Popen([sleep_path, '10']).pid
+    subprocess.check_call([OPEN_PATH, 'proc-other', str(sleep_pid)])
 
-    subprocess.check_call([OPEN_PATH, 'proc-sleep', str(sleep_pid)])
+
+@pytest.mark.skipif(not which('sleep'), reason='sleep not found on system')
+def test_procfs_other_process_not_allowed(bpf_program: BPFProgram, caplog, setup_testdir):
+    sleep_path = which('sleep')
+    bpf_program.add_profile(OPEN_PATH, False)
+    bpf_program.add_fs_rule(OPEN_PATH, '/tmp/bpfbox/a', FS_ACCESS.READ, BPFBOX_ACTION.TAINT)
+    bpf_program.add_fs_rule(OPEN_PATH, '/proc', FS_ACCESS.EXEC)
+
+    subprocess.check_call([OPEN_PATH, 'proc-self'])
+
+    sleep_pid = subprocess.Popen([sleep_path, '10']).pid
+
+    with pytest.raises(subprocess.CalledProcessError):
+        subprocess.check_call([OPEN_PATH, 'proc-other', str(sleep_pid)])
 
 
 def test_chown_allowed(bpf_program: BPFProgram, caplog, setup_testdir):

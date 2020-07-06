@@ -32,11 +32,12 @@ logger = get_logger()
 
 comma = Literal(',').suppress()
 quoted_string = QuotedString('"') | QuotedString("'")
-comment = QuotedString(
-    quoteChar='/*', endQuoteChar='*/', multiline=True
-).suppress()
+comment = QuotedString(quoteChar='/*', endQuoteChar='*/', multiline=True).suppress()
 lparen = Literal('(').suppress()
 rparen = Literal(')').suppress()
+
+fs_access = Word('rwaxligsu')('access')
+pathname = quoted_string('pathname')
 
 
 class PolicyGenerator:
@@ -83,6 +84,15 @@ class PolicyGenerator:
                 rule_actions.append('allow')
             action = BPFBOX_ACTION.from_actions(rule_actions)
             self.commands.append(lambda exe: self.bpf_program.add_fs_rule(exe, pathname, access, action))
+        elif rule['type'] == 'proc':
+            pathname = rule['pathname']
+            access = FS_ACCESS.from_string(rule['access'])
+            rule_actions = [a for a in rule['macros'] if a in ['allow', 'taint', 'audit']]
+            # Assume allow if not a taint rule
+            if not 'taint' in rule_actions:
+                rule_actions.append('allow')
+            action = BPFBOX_ACTION.from_actions(rule_actions)
+            self.commands.append(lambda exe: self.bpf_program.add_procfs_rule(exe, pathname, access, action))
         else:
             raise Exception('Unknown rule type')
 
@@ -133,29 +143,24 @@ class PolicyGenerator:
 
     def _fs_rule(self) -> ParserElement:
         rule_type = Literal('fs')('type')
-        pathname = quoted_string
-        access = Word('rwaxligsu')
         return (
             rule_type
             + lparen
-            + pathname('pathname')
+            + pathname
             + comma
-            + access('access')
+            + fs_access
             + rparen
         )
 
     def _procfs_rule(self) -> ParserElement:
         rule_type = Literal('proc')('type')
-        pathname = quoted_string
-        return rule_type + lparen + pathname('pathname') + rparen
+        return rule_type + lparen + pathname + comma + fs_access + rparen
 
     def _rule(self) -> ParserElement:
         fs_rule = self._fs_rule()
         procfs_rule = self._procfs_rule()
         # TODO add more rule types here
-        return Group(
-            Group(ZeroOrMore(self._macro()))('macros') + (fs_rule | procfs_rule)
-        )
+        return Group(Group(ZeroOrMore(self._macro()))('macros') + (fs_rule | procfs_rule))
 
     def _block(self) -> ParserElement:
         begin = Literal('{').suppress()
