@@ -34,7 +34,6 @@ from bpfbox.utils import which
 from bpfbox import defs
 
 DRIVER_PATH = os.path.join(defs.project_path, 'tests/driver')
-SILLY_PATH = os.path.join(DRIVER_PATH, 'silly_program')
 OPEN_PATH = os.path.join(DRIVER_PATH, 'open')
 
 @pytest.fixture
@@ -185,3 +184,64 @@ def test_open_proc_other_not_allowed(policy_generator: PolicyGenerator, setup_te
     sleep_pid = subprocess.Popen([sleep_path, '10']).pid
     with pytest.raises(subprocess.CalledProcessError):
         subprocess.check_call([OPEN_PATH, 'proc-other', str(sleep_pid)])
+
+
+@pytest.mark.skipif(not which('exa'), reason='exa not found on system')
+def test_exa_profile(policy_generator: PolicyGenerator, setup_testdir):
+    exa = which('exa')
+
+    text = """
+    #![profile '%s']
+
+    fs('/etc/ld.so.cache', rg)
+    fs('/usr/lib/libz.so.1', rg)
+    fs('/usr/lib/libdl.so.2', rg)
+    fs('/usr/lib/librt.so.1', rg)
+    fs('/usr/lib/libpthread.so.0', rg)
+    fs('/usr/lib/libgcc_s.so.1', rg)
+    fs('/usr/lib/libc.so.6', rg)
+    fs('/usr/lib/perl5/5.30/core_perl/CORE/dquote_inline.h', r)
+    fs('/usr/lib/libnss_files-2.31.so', rg)
+    fs('/etc/localtime', r)
+    fs('/usr/lib/locale/locale-archive', r)
+    fs('/etc/nsswitch.conf', r)
+    fs('/etc/passwd', r)
+    fs('/var', x)
+    fs('/run/nscd', x)
+    fs('/proc', x)
+    fs('/tmp/bpfbox', rxg)
+    fs('/tmp/bpfbox/a', g)
+    fs('/tmp/bpfbox/b', g)
+    fs('/tmp/bpfbox/c', g)
+    fs('/tmp/bpfbox/d', g)
+    """ % (exa)
+
+    policy_generator.process_policy_text(text)
+
+    out = subprocess.check_output([exa, '/tmp/bpfbox']).decode('utf-8')
+    assert out.strip() == '\n'.join(sorted(os.listdir('/tmp/bpfbox')))
+
+@pytest.mark.skipif(not which('ls'), reason='ls not found on system')
+def test_ls(policy_generator: PolicyGenerator, setup_testdir):
+    ls = which('ls')
+
+    text = """
+    #![profile '%s']
+
+    fs('/etc/ld.so.cache', rg)
+    fs('/usr/lib/libcap.so.2', rg)
+    fs('/usr/lib/libc.so.6', rg)
+    fs('/usr/lib/locale/locale-archive', rg)
+    fs('/usr/share', x)
+    fs('/proc', x)
+    fs('/tmp/bpfbox', rxg)
+    fs('/tmp/bpfbox/a', g)
+    fs('/tmp/bpfbox/b', g)
+    fs('/tmp/bpfbox/c', g)
+    fs('/tmp/bpfbox/d', g)
+    """ % (ls)
+
+    policy_generator.process_policy_text(text)
+
+    out = subprocess.check_output([ls, '/tmp/bpfbox']).decode('utf-8')
+    assert out.strip() == '\n'.join(sorted(os.listdir('/tmp/bpfbox')))
