@@ -127,16 +127,12 @@ int main(int argc, char **argv)
         close(fd);
     }
 
-    if (!strcmp(argv[1], "proc-1")) {
-        fd = open_or_die("/proc/1/status", O_RDONLY);
-        close(fd);
-    }
-
-    if (!strcmp(argv[1], "proc-sleep") && argc > 2) {
+    if (!strcmp(argv[1], "proc-other") && argc > 2) {
         int sleep_pid = atoi(argv[2]);
         char sleep_path[256];
         sprintf(sleep_path, "/proc/%d/status", sleep_pid);
         fd = open_or_die(sleep_path, O_RDONLY);
+        fprintf(stderr, "fd = %d\n", fd);
         close(fd);
     }
 

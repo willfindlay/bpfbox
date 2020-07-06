@@ -168,6 +168,22 @@ class BPFProgram:
                 )
             )
 
+        # Debugging below this line
+        if not self.debug:
+            return
+
+        @ringbuf_callback(self.bpf, 'debug_task_to_inode')
+        def debug_task_to_inode(ctx, event, size):
+            logger.debug(
+                'task_to_inode: subject=%s object=%s inode=%d'
+                % (
+                    self._format_exe(event.subject_key, event.pid, -1),
+                    self._format_exe(event.object_key, event.other_pid, -1),
+                    event.st_ino,
+                )
+            )
+
+
     def _register_uprobes(self):
         logger.info('Registering uprobes...')
         register_uprobes(self.bpf)
@@ -264,7 +280,7 @@ class BPFProgram:
         action: BPFBOX_ACTION,
     ) -> int:
         assert self.have_registered_uprobes
-        if not (action & BPFBOX_ACTION.DENY | BPFBOX_ACTION.COMPLAIN):
+        if (action & (BPFBOX_ACTION.DENY | BPFBOX_ACTION.COMPLAIN)):
             logger.error(
                 '_add_fs_rule: Action must be one of ALLOW, TAINT, or AUDIT'
             )
@@ -323,7 +339,7 @@ class BPFProgram:
         action: BPFBOX_ACTION,
     ) -> int:
         assert self.have_registered_uprobes
-        if not (action & BPFBOX_ACTION.DENY | BPFBOX_ACTION.COMPLAIN):
+        if action & (BPFBOX_ACTION.DENY | BPFBOX_ACTION.COMPLAIN):
             logger.error(
                 '_add_procfs_rule: Action must be one of ALLOW, TAINT, or AUDIT'
             )

@@ -102,6 +102,14 @@ static __always_inline void audit_fs(struct bpfbox_process_t *process,
 // }
 
 /* =========================================================================
+ * Debugging
+ * ========================================================================= */
+
+#ifdef BPFBOX_DEBUG
+BPF_RINGBUF_OUTPUT(debug_task_to_inode, BPFBOX_AUDIT_RINGBUF_PAGES);
+#endif
+
+/* =========================================================================
  * Helper Functions
  * ========================================================================= */
 
@@ -535,10 +543,11 @@ LSM_PROBE(task_to_inode, struct task_struct *target, struct inode *inode)
     struct bpfbox_policy_t policy = {};
 
     // Allow a process to access itself
-    if (process->tgid == target->tgid) {
+    if ((struct task_struct *)bpf_get_current_task() == target) {
         policy.allow =
             FS_READ | FS_WRITE | FS_APPEND | FS_EXEC | FS_GETATTR | FS_SETATTR;
         fs_policy.update(&key, &policy);
+
         return 0;
     }
 
@@ -559,6 +568,31 @@ LSM_PROBE(task_to_inode, struct task_struct *target, struct inode *inode)
     if (!pfs_policy) {
         return 0;
     }
+
+#ifdef BPFBOX_DEBUG
+    struct debug_t {
+        u64 subject_key;
+        u32 pid;
+        u64 object_key;
+        u32 other_pid;
+        u32 st_ino;
+    };
+
+    struct debug_t *debug =
+        debug_task_to_inode.ringbuf_reserve(sizeof(struct debug_t));
+
+    if (debug) {
+        debug->subject_key = process->profile_key;
+        debug->pid = process->pid;
+
+        debug->object_key = other_process->profile_key;
+        debug->other_pid = other_process->pid;
+
+        debug->st_ino = inode->i_ino;
+
+        debug_task_to_inode.ringbuf_submit(debug, 0);
+    }
+#endif
 
     // Set fs policy according to procfs policy
     policy.allow = pfs_policy->allow;
