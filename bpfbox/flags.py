@@ -28,6 +28,7 @@
 """
 
 from enum import Enum, unique, _decompose, Flag as _Flag
+from typing import List
 
 from bpfbox.logger import get_logger
 
@@ -49,10 +50,6 @@ class Flag(_Flag):
         else:
             return '|'.join([str(m._name_ or m._value_) for m in members])
 
-    @staticmethod
-    def from_string(s: str):
-        raise NotImplementedError('Flags must implement from_string')
-
 
 @unique
 class BPFBOX_ACTION(Flag):
@@ -64,18 +61,18 @@ class BPFBOX_ACTION(Flag):
     COMPLAIN = 0x00000010
 
     @staticmethod
-    def from_string(s: str):
+    def from_actions(actions: List[str]):
         action_map = {
             'taint': BPFBOX_ACTION.TAINT,
             'allow': BPFBOX_ACTION.ALLOW,
             'audit': BPFBOX_ACTION.AUDIT,
         }
         action = BPFBOX_ACTION.NONE
-        for ell in s:
+        for a in actions:
             try:
-                action |= action_map[ell]
-            except:
-                logger.warning('Unknown action "%s"' % (ell))
+                action |= action_map[a]
+            except KeyError:
+                pass
         return action
 
 

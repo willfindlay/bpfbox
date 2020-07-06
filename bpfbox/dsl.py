@@ -20,6 +20,8 @@
     2020-Jul-04  William Findlay  Created this.
 """
 
+from typing import Callable
+
 from pyparsing import *
 
 from bpfbox.bpf_program import BPFProgram
@@ -29,20 +31,41 @@ from bpfbox.flags import BPFBOX_ACTION, FS_ACCESS
 logger = get_logger()
 
 comma = Literal(',').suppress()
-quoted_string = (QuotedString('"') | QuotedString("'"))
-comment = QuotedString(quoteChar='/*', endQuoteChar='*/', multiline=True).suppress()
+quoted_string = QuotedString('"') | QuotedString("'")
+comment = QuotedString(
+    quoteChar='/*', endQuoteChar='*/', multiline=True
+).suppress()
 lparen = Literal('(').suppress()
 rparen = Literal(')').suppress()
 
 
 class PolicyGenerator:
+    """
+    Parses policy files and generates rules for the BPF programs to enforce.
+    """
+
     def __init__(self, bpf_program: BPFProgram):
         self.bpf_program = bpf_program
         self.bnf = self._make_bnf()
+        self.exe = None
+        self.commands = []
 
-    def parse_profile_text(self, profile_text: str) -> Dict:
+    def process_policy_file(self, policy_file: str):
+        with open(policy_file, 'r') as f:
+            self.process_policy_text(f.read())
+
+    def process_policy_text(self, policy_text: str):
+        self._parse_policy_text(policy_text)
+
+        assert self.exe is not None
+        self.bpf_program.add_profile(self.exe, True)
+
+        for command in self.commands:
+            command(self.exe)
+
+    def _parse_policy_text(self, policy_text: str) -> Dict:
         try:
-            return self.bnf.parseString(profile_text, True).asDict()
+            return self.bnf.parseString(policy_text, True).asDict()
         except ParseException as pe:
             logger.error('Unable to parse profile:')
             logger.error("    " + pe.line)
@@ -50,47 +73,94 @@ class PolicyGenerator:
             logger.error("    %s" % (pe))
             raise pe
 
+    def _do_rule_common(self, rule):
+        if rule['type'] == 'fs':
+            pathname = rule['pathname']
+            access = FS_ACCESS.from_string(rule['access'])
+            rule_actions = [a for a in rule['macros'] if a in ['allow', 'taint', 'audit']]
+            # Assume allow if not a taint rule
+            if not 'taint' in rule_actions:
+                rule_actions.append('allow')
+            action = BPFBOX_ACTION.from_actions(rule_actions)
+            self.commands.append(lambda exe: self.bpf_program.add_fs_rule(exe, pathname, access, action))
+        else:
+            raise Exception('Unknown rule type')
+
+    def _rule_action(self, toks):
+        rule = toks.asDict()['rules'][0]
+        self._do_rule_common(rule)
+
+    def _block_action(self, toks):
+        block = toks.asDict()['blocks'][0]
+        for rule in block['rules']:
+            rule['macros'] += block['macros']
+            self._do_rule_common(rule)
+
+    def _profile_macro_action(self, toks):
+        self.exe = toks[0]
+
     def _make_bnf(self) -> ParserElement:
         # Special required macro for profile
-        profile_macro = Literal('#![').suppress() + Keyword('profile').suppress() + \
-                quoted_string('profile') +  Literal(']').suppress() + LineEnd().suppress()
+        profile_macro = (
+            Literal('#![').suppress()
+            + Keyword('profile').suppress()
+            + quoted_string('profile')
+            + Literal(']').suppress()
+            + LineEnd().suppress()
+        ).setParseAction(self._profile_macro_action)
 
         # Rules
-        rule = self._rule()
+        rule = self._rule().setParseAction(self._rule_action)
 
         # Blocks
-        block = self._block()
+        block = self._block().setParseAction(self._block_action)
 
-        return profile_macro & ZeroOrMore((rule('rules*') | block('blocks*') | comment))
+        return profile_macro & ZeroOrMore(
+            (rule('rules*') | block('blocks*') | comment)
+        )
 
-    def _macro_contents(self):
+    def _macro_contents(self) -> ParserElement:
         taint = Keyword('taint')
         allow = Keyword('allow')
         audit = Keyword('audit')
-        return (allow | taint | audit)
+        return allow | taint | audit
 
-    def _macro(self):
+    def _macro(self) -> ParserElement:
         macro_contents = self._macro_contents()
-        return Literal('#[').suppress() + macro_contents + Literal(']').suppress()
+        return (
+            Literal('#[').suppress() + macro_contents + Literal(']').suppress()
+        )
 
-    def _fs_rule(self):
+    def _fs_rule(self) -> ParserElement:
         rule_type = Literal('fs')('type')
         pathname = quoted_string
         access = Word('rwaxligsu')
-        return rule_type + lparen + pathname('pathname') + comma + access('access') + rparen
+        return (
+            rule_type
+            + lparen
+            + pathname('pathname')
+            + comma
+            + access('access')
+            + rparen
+        )
 
-    def _procfs_rule(self):
+    def _procfs_rule(self) -> ParserElement:
         rule_type = Literal('proc')('type')
         pathname = quoted_string
         return rule_type + lparen + pathname('pathname') + rparen
 
-    def _rule(self):
+    def _rule(self) -> ParserElement:
         fs_rule = self._fs_rule()
         procfs_rule = self._procfs_rule()
         # TODO add more rule types here
-        return Group(ZeroOrMore(self._macro())('macros') + (fs_rule | procfs_rule))
+        return Group(
+            Group(ZeroOrMore(self._macro()))('macros') + (fs_rule | procfs_rule)
+        )
 
-    def _block(self):
+    def _block(self) -> ParserElement:
         begin = Literal('{').suppress()
         end = Literal('}').suppress()
-        return Group(ZeroOrMore(self._macro())('macros') + Group(begin + ZeroOrMore(self._rule()) + end)('rules'))
+        return Group(
+            Group(ZeroOrMore(self._macro()))('macros')
+            + Group(begin + ZeroOrMore(self._rule()) + end)('rules')
+        )

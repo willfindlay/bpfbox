@@ -34,6 +34,7 @@ from bpfbox import defs
 
 DRIVER_PATH = os.path.join(defs.project_path, 'tests/driver')
 SILLY_PATH = os.path.join(DRIVER_PATH, 'silly_program')
+OPEN_PATH = os.path.join(DRIVER_PATH, 'open')
 
 @pytest.fixture
 def setup_testdir():
@@ -50,10 +51,73 @@ def policy_generator(bpf_program: BPFProgram):
     yield PolicyGenerator(bpf_program)
 
 
-@pytest.mark.xfail(reason='Not yet implemented')
-def test_silly_program_policy_smoke(policy_generator: PolicyGenerator, setup_testdir):
+def test_silly_program_policy_implicit_taint(policy_generator: PolicyGenerator, setup_testdir):
     text = """
     #![profile '%s']
     """ % (SILLY_PATH)
 
-    subprocess.check_output([SILLY_PATH])
+    policy_generator.process_policy_text(text)
+
+    with pytest.raises(subprocess.CalledProcessError):
+        subprocess.check_output([SILLY_PATH])
+
+
+def test_open_complex_policy_no_execute_permission(policy_generator: PolicyGenerator, setup_testdir):
+    text = """
+    #![profile '%s']
+
+    #[taint]
+    fs('/tmp/bpfbox/a', r)
+
+    #[allow] {
+        fs('/tmp/bpfbox/a', rw)
+        fs('/tmp/bpfbox/b', a)
+        fs('/tmp/bpfbox/c', r)
+    }
+
+    """ % (OPEN_PATH)
+
+    policy_generator.process_policy_text(text)
+
+    with pytest.raises(subprocess.CalledProcessError):
+        subprocess.check_call([OPEN_PATH, 'complex'])
+
+
+def test_open_complex_policy(policy_generator: PolicyGenerator, setup_testdir):
+    text = """
+    #![profile '%s']
+
+    #[taint]
+    fs('/tmp/bpfbox/a', r)
+
+    #[allow] {
+        fs('/tmp/bpfbox/a', rw)
+        fs('/tmp/bpfbox/b', a)
+        fs('/tmp/bpfbox/c', r)
+        fs('/tmp/bpfbox/d', x)
+    }
+
+    """ % (OPEN_PATH)
+
+    policy_generator.process_policy_text(text)
+
+    subprocess.check_call([OPEN_PATH, 'complex'])
+
+
+def test_open_complex_policy_implicit_allow(policy_generator: PolicyGenerator, setup_testdir):
+    text = """
+    #![profile '%s']
+
+    #[taint]
+    fs('/tmp/bpfbox/a', r)
+
+    fs('/tmp/bpfbox/a', rw)
+    fs('/tmp/bpfbox/b', a)
+    fs('/tmp/bpfbox/c', r)
+    fs('/tmp/bpfbox/d', x)
+
+    """ % (OPEN_PATH)
+
+    policy_generator.process_policy_text(text)
+
+    subprocess.check_call([OPEN_PATH, 'complex'])
