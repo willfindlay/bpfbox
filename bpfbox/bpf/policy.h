@@ -117,10 +117,19 @@ struct bpfbox_procfs_policy_key_t {
         event->pid = process->pid;                 \
         event->profile_key = process->profile_key; \
         event->action = action;                    \
+        event->access = access;                    \
     } while (0)
 
 /* for auditing inode events */
 struct bpfbox_fs_audit_event_t {
+    STRUCT_AUDIT_COMMON
+    u32 st_ino;
+    u32 st_dev;
+    char s_id[32];
+};
+
+/* for auditing ipc */
+struct bpfbox_ipc_audit_event_t {
     STRUCT_AUDIT_COMMON
     u32 st_ino;
     u32 st_dev;

@@ -239,6 +239,7 @@ def test_ls(policy_generator: PolicyGenerator, setup_testdir):
     fs('/tmp/bpfbox/b', g)
     fs('/tmp/bpfbox/c', g)
     fs('/tmp/bpfbox/d', g)
+    proc('/usr/bin/ls', g)
     """ % (ls)
 
     policy_generator.process_policy_text(text)

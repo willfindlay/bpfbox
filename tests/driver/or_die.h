@@ -113,3 +113,16 @@ void symlink_or_die(const char *old, const char *new)
             exit(1);
     }
 }
+
+int pipe_or_die(int pipefd[2])
+{
+    int rc = pipe(pipefd);
+
+    if (rc < 0) {
+        fprintf(stderr, "pipe() failed with %d\n", rc);
+        if (errno == EPERM)
+            exit(1);
+    }
+
+    return rc;
+}

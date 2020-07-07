@@ -76,9 +76,29 @@ static __always_inline void audit_fs(struct bpfbox_process_t *process,
     event->st_ino = inode->i_ino;
     event->st_dev = (u32)new_encode_dev(inode->i_sb->s_dev);
     bpf_probe_read_str(event->s_id, sizeof(event->s_id), inode->i_sb->s_id);
-    event->access = access;
 
     fs_audit_events.ringbuf_submit(event, 0);
+}
+
+BPF_RINGBUF_OUTPUT(ipc_audit_events, BPFBOX_AUDIT_RINGBUF_PAGES);
+
+static __always_inline void audit_ipc(struct bpfbox_process_t *process,
+                                      enum bpfbox_action_t action,
+                                      struct inode *inode,
+                                      bpfbox_accesss_t access)
+{
+    FILTER_AUDIT(action);
+
+    struct bpfbox_ipc_audit_event_t *event = ipc_audit_events.ringbuf_reserve(
+        sizeof(struct bpfbox_ipc_audit_event_t));
+
+    DO_AUDIT_COMMON(event, process, action);
+
+    event->st_ino = inode->i_ino;
+    event->st_dev = (u32)new_encode_dev(inode->i_sb->s_dev);
+    bpf_probe_read_str(event->s_id, sizeof(event->s_id), inode->i_sb->s_id);
+
+    ipc_audit_events.ringbuf_submit(event, 0);
 }
 
 // BPF_RINGBUF_OUTPUT(network_audit_events, BPFBOX_AUDIT_RINGBUF_PAGES);
@@ -124,15 +144,22 @@ static __always_inline struct bpfbox_process_t *create_process(u32 pid,
     new_process.profile_key = profile_key;
     new_process.tainted = tainted;
 
-    processes.update(&pid, &new_process);
-
-    return processes.lookup(&pid);
+    return processes.lookup_or_try_init(&pid, &new_process);
 }
 
 static __always_inline struct bpfbox_process_t *get_current_process()
 {
     u32 pid = bpf_get_current_pid_tgid();
     return processes.lookup(&pid);
+}
+
+static __always_inline struct bpfbox_profile_t *create_profile(u64 profile_key,
+                                                               u8 taint_on_exec)
+{
+    struct bpfbox_profile_t new_profile = {};
+    new_profile.taint_on_exec = taint_on_exec;
+
+    return profiles.lookup_or_try_init(&profile_key, &new_profile);
 }
 
 static __always_inline enum bpfbox_action_t policy_decision(
@@ -181,6 +208,10 @@ static __always_inline enum bpfbox_action_t policy_decision(
     // Default deny
     return deny_action;
 }
+
+/* =========================================================================
+ * File System Policy Programs
+ * ========================================================================= */
 
 /* Linux access mask to bpfbox access */
 static __always_inline enum bpfbox_fs_access_t file_mask_to_access(int mask)
@@ -248,10 +279,6 @@ static __always_inline enum bpfbox_action_t fs_policy_decision(
 
     return policy_decision(process, policy, access);
 }
-
-/* =========================================================================
- * LSM Programs
- * ========================================================================= */
 
 /* A task requests access @mask to @inode */
 LSM_PROBE(inode_permission, struct inode *inode, int mask)
@@ -605,7 +632,7 @@ LSM_PROBE(task_to_inode, struct task_struct *target, struct inode *inode)
 }
 
 /* =========================================================================
- * Sched Tracepoints for Bookkeeping
+ * Process/Profile Creation and Related Bookkeeping
  * ========================================================================= */
 
 /* A task fork()s/clone()s/vfork()s */
@@ -709,14 +736,14 @@ int add_profile(struct pt_regs *ctx)
     u64 profile_key = PT_REGS_PARM1(ctx);
     u8 taint_on_exec = PT_REGS_PARM2(ctx);
 
-    struct bpfbox_profile_t _init = {};
     struct bpfbox_profile_t *profile =
-        profiles.lookup_or_try_init(&profile_key, &_init);
+        create_profile(profile_key, taint_on_exec);
     if (!profile) {
         // TODO log error
         return 1;
     }
 
+    // We need to make sure we always overwrite taint_on_exec
     profile->taint_on_exec = taint_on_exec;
 
     return 0;
@@ -787,11 +814,8 @@ int add_procfs_rule(struct pt_regs *ctx)
     }
 
     // Create object profile if it does not exist
-    struct bpfbox_profile_t _profile_init = {
-        .taint_on_exec = 0,
-    };
     struct bpfbox_profile_t *object_profile =
-        profiles.lookup_or_try_init(&object_profile_key, &_profile_init);
+        create_profile(object_profile_key, 0);
     if (!object_profile) {
         // TODO log error
         return 1;
