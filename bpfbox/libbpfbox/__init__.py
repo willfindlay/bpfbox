@@ -68,3 +68,7 @@ def register_uprobes(bpf):
             name=defs.libbpfbox, sym=command, pid=os.getpid(), fn_name=command
         )
         logger.debug(f'Registered uprobe for {command}.')
+
+
+# TODO: move command wrappers in here
+#class Commands:
