@@ -27,6 +27,7 @@
 #include <linux/fs.h>
 #include <linux/sched.h>
 #include <linux/version.h>
+#include <uapi/asm/signal.h>
 
 #if LINUX_VERSION_CODE < KERNEL_VERSION(5, 8, 0)
 #error BPFBox requires Linux 5.8+
@@ -55,6 +56,9 @@ BPF_HASH(fs_policy, struct bpfbox_fs_policy_key_t, struct bpfbox_policy_t,
 BPF_HASH(procfs_policy, struct bpfbox_procfs_policy_key_t,
          struct bpfbox_policy_t, BPFBOX_MAX_POLICY_SIZE);
 
+BPF_HASH(ipc_policy, struct bpfbox_ipc_policy_key_t, struct bpfbox_policy_t,
+         BPFBOX_MAX_POLICY_SIZE);
+
 /* =========================================================================
  * Auditing
  * ========================================================================= */
@@ -82,21 +86,22 @@ static __always_inline void audit_fs(struct bpfbox_process_t *process,
 
 BPF_RINGBUF_OUTPUT(ipc_audit_events, BPFBOX_AUDIT_RINGBUF_PAGES);
 
-static __always_inline void audit_ipc(struct bpfbox_process_t *process,
-                                      enum bpfbox_action_t action,
-                                      struct inode *inode,
-                                      bpfbox_accesss_t access)
+static __always_inline void audit_ipc(struct bpfbox_process_t *subject_process,
+                                      struct bpfbox_process_t *object_process,
+                                      u32 object_uid, bpfbox_accesss_t access,
+                                      enum bpfbox_action_t action)
 {
     FILTER_AUDIT(action);
 
     struct bpfbox_ipc_audit_event_t *event = ipc_audit_events.ringbuf_reserve(
         sizeof(struct bpfbox_ipc_audit_event_t));
 
-    DO_AUDIT_COMMON(event, process, action);
+    DO_AUDIT_COMMON(event, subject_process, action);
 
-    event->st_ino = inode->i_ino;
-    event->st_dev = (u32)new_encode_dev(inode->i_sb->s_dev);
-    bpf_probe_read_str(event->s_id, sizeof(event->s_id), inode->i_sb->s_id);
+    // TODO: make this work
+    event->object_uid = object_uid;
+    event->object_pid = object_process->pid;
+    event->object_profile_key = object_process->profile_key;
 
     ipc_audit_events.ringbuf_submit(event, 0);
 }
@@ -126,7 +131,7 @@ static __always_inline void audit_ipc(struct bpfbox_process_t *process,
  * ========================================================================= */
 
 #ifdef BPFBOX_DEBUG
-BPF_RINGBUF_OUTPUT(debug_task_to_inode, BPFBOX_AUDIT_RINGBUF_PAGES);
+BPF_RINGBUF_OUTPUT(task_to_inode_debug_events, BPFBOX_AUDIT_RINGBUF_PAGES);
 #endif
 
 /* =========================================================================
@@ -173,18 +178,19 @@ static __always_inline enum bpfbox_action_t policy_decision(
     enum bpfbox_action_t deny_action = ACTION_DENY;
 #endif
 
+    enum bpfbox_action_t allow_action = ACTION_ALLOW;
+
     // If we have no policy for this object, either deny or allow,
     // depending on if the process is tainted or not
     if (!policy) {
         if (process->tainted) {
             return deny_action;
         } else {
-            return ACTION_ALLOW;
+            return allow_action;
         }
     }
 
     // Set allow action based on whether or not we want to audit
-    enum bpfbox_action_t allow_action = ACTION_ALLOW;
     if (access & policy->audit) {
         allow_action |= ACTION_AUDIT;
     }
@@ -553,18 +559,48 @@ LSM_PROBE(inode_removexattr, struct dentry *dentry)
     return action & ACTION_DENY ? -EPERM : 0;
 }
 
+static __inline void debug_task_to_inode(
+    struct bpfbox_process_t *subject_process,
+    struct bpfbox_process_t *object_process, struct inode *inode)
+{
+#ifdef BPFBOX_DEBUG
+    struct debug_t {
+        u64 subject_key;
+        u32 subject_pid;
+        u64 object_key;
+        u32 object_pid;
+        u32 st_ino;
+    };
+
+    struct debug_t *debug =
+        task_to_inode_debug_events.ringbuf_reserve(sizeof(struct debug_t));
+
+    if (debug) {
+        debug->subject_key = subject_process->profile_key;
+        debug->subject_pid = subject_process->pid;
+
+        debug->object_key = object_process->profile_key;
+        debug->object_pid = object_process->pid;
+
+        debug->st_ino = inode->i_ino;
+
+        task_to_inode_debug_events.ringbuf_submit(debug, 0);
+    }
+#endif
+}
+
 /* Bookkeeping for procfs, etc. */
 LSM_PROBE(task_to_inode, struct task_struct *target, struct inode *inode)
 {
-    struct bpfbox_process_t *process = get_current_process();
-    if (!process) {
+    struct bpfbox_process_t *subject_process = get_current_process();
+    if (!subject_process) {
         return 0;
     }
 
     struct bpfbox_fs_policy_key_t key = {
         .st_ino = inode->i_ino,
         .st_dev = (u32)new_encode_dev(inode->i_sb->s_dev),
-        .profile_key = process->profile_key,
+        .profile_key = subject_process->profile_key,
     };
 
     struct bpfbox_policy_t policy = {};
@@ -575,19 +611,21 @@ LSM_PROBE(task_to_inode, struct task_struct *target, struct inode *inode)
             FS_READ | FS_WRITE | FS_APPEND | FS_EXEC | FS_GETATTR | FS_SETATTR;
         fs_policy.update(&key, &policy);
 
+        debug_task_to_inode(subject_process, subject_process, inode);
+
         return 0;
     }
 
-    // Look up target process
+    // Look up target subject_process
     u32 target_pid = target->pid;
-    struct bpfbox_process_t *other_process = processes.lookup(&target_pid);
-    if (!other_process) {
+    struct bpfbox_process_t *object_process = processes.lookup(&target_pid);
+    if (!object_process) {
         return 0;
     }
 
     struct bpfbox_procfs_policy_key_t pfs_key = {
-        .subject_profile_key = process->profile_key,
-        .object_profile_key = other_process->profile_key,
+        .subject_profile_key = subject_process->profile_key,
+        .object_profile_key = object_process->profile_key,
     };
 
     // Look up procfs policy from subject to object
@@ -596,30 +634,7 @@ LSM_PROBE(task_to_inode, struct task_struct *target, struct inode *inode)
         return 0;
     }
 
-#ifdef BPFBOX_DEBUG
-    struct debug_t {
-        u64 subject_key;
-        u32 pid;
-        u64 object_key;
-        u32 other_pid;
-        u32 st_ino;
-    };
-
-    struct debug_t *debug =
-        debug_task_to_inode.ringbuf_reserve(sizeof(struct debug_t));
-
-    if (debug) {
-        debug->subject_key = process->profile_key;
-        debug->pid = process->pid;
-
-        debug->object_key = other_process->profile_key;
-        debug->other_pid = other_process->pid;
-
-        debug->st_ino = inode->i_ino;
-
-        debug_task_to_inode.ringbuf_submit(debug, 0);
-    }
-#endif
+    debug_task_to_inode(subject_process, object_process, inode);
 
     // Set fs policy according to procfs policy
     policy.allow = pfs_policy->allow;
@@ -629,6 +644,100 @@ LSM_PROBE(task_to_inode, struct task_struct *target, struct inode *inode)
     fs_policy.update(&key, &policy);
 
     return 0;
+}
+
+/* =========================================================================
+ * IPC Policy
+ * ========================================================================= */
+
+// TODO: keep going with this
+
+static __always_inline enum bpfbox_action_t ipc_policy_decision(
+    struct bpfbox_process_t *subject_process,
+    struct bpfbox_process_t *object_process, enum bpfbox_ipc_access_t access)
+{
+    struct bpfbox_ipc_policy_key_t key = {
+        .subject_key = subject_process->profile_key,
+        .object_key = object_process->profile_key,
+    };
+
+    struct bpfbox_policy_t *policy = ipc_policy.lookup(&key);
+
+    return policy_decision(subject_process, policy, access);
+}
+
+static __always_inline enum bpfbox_ipc_access_t signal_to_ipc_access(int sig)
+{
+    switch (sig) {
+        case 0:
+            return IPC_SIGCHECK;
+            break;
+        case SIGCHLD:
+            return IPC_SIGCHLD;
+            break;
+        case SIGKILL:
+            return IPC_SIGKILL;
+            break;
+        case SIGSTOP:
+            return IPC_SIGSTOP;
+            break;
+        default:
+            return IPC_SIGMISC;
+            break;
+    }
+}
+
+LSM_PROBE(task_kill, struct task_struct *target, struct kernel_siginfo *info,
+          int sig, const struct cred *cred)
+{
+    // Signal from kernel
+    if (info == 1) {
+        return 0;
+    }
+
+    struct bpfbox_process_t *subject_process = get_current_process();
+
+    u32 target_pid = target->pid;
+    struct bpfbox_process_t *object_process = processes.lookup(&target_pid);
+
+    enum bpfbox_ipc_access_t access = signal_to_ipc_access(sig);
+
+    // Neither task is confined
+    if (!subject_process && !object_process) {
+        return 0;
+    }
+
+    // An unconfined task is attempting to signal a confined task
+    if (!subject_process) {
+        return 0;
+    }
+
+    enum bpfbox_action_t action;
+
+    // An confined task is attempting to signal an "unconfined" task
+    if (!object_process) {
+        struct bpfbox_process_t unknown = {
+            .pid = target->pid,
+            .tgid = target->tgid,
+            .profile_key = 0,
+            .tainted = 0,
+        };
+#ifdef BPFBOX_ENFORCING
+        action = ACTION_DENY;
+#else
+        action = ACTION_COMPLAIN;
+#endif
+        audit_ipc(subject_process, &unknown, target->cred->uid.val, access,
+                  action);
+        goto out;
+    }
+
+    action = ipc_policy_decision(subject_process, object_process, access);
+    audit_ipc(subject_process, object_process, target->cred->uid.val, access,
+              action);
+
+out:
+    return action & ACTION_DENY ? -EPERM : 0;
 }
 
 /* =========================================================================
@@ -828,6 +937,53 @@ int add_procfs_rule(struct pt_regs *ctx)
     struct bpfbox_policy_t _init = {};
     struct bpfbox_policy_t *policy =
         procfs_policy.lookup_or_try_init(&key, &_init);
+    if (!policy) {
+        // TODO log error
+        return 1;
+    }
+
+    add_policy_common(policy, profile, access_mask, action);
+
+    return 0;
+}
+
+int add_ipc_rule(struct pt_regs *ctx)
+{
+    u64 subject_key = PT_REGS_PARM1(ctx);
+    u64 object_key = PT_REGS_PARM2(ctx);
+    u32 access_mask = PT_REGS_PARM3(ctx);
+    enum bpfbox_action_t action = PT_REGS_PARM4(ctx);
+
+    if (action & (ACTION_DENY | ACTION_COMPLAIN)) {
+        // TODO log error
+        return 1;
+    }
+
+    if (!(action & (ACTION_ALLOW | ACTION_AUDIT | ACTION_TAINT))) {
+        // TODO log error
+        return 1;
+    }
+
+    struct bpfbox_profile_t *profile = profiles.lookup(&subject_key);
+    if (!profile) {
+        // TODO log error
+        return 1;
+    }
+
+    // Create object profile if it does not exist
+    struct bpfbox_profile_t *object_profile = create_profile(object_key, 0);
+    if (!object_profile) {
+        // TODO log error
+        return 1;
+    }
+
+    struct bpfbox_ipc_policy_key_t key = {};
+    key.subject_key = subject_key;
+    key.object_key = object_key;
+
+    struct bpfbox_policy_t _init = {};
+    struct bpfbox_policy_t *policy =
+        ipc_policy.lookup_or_try_init(&key, &_init);
     if (!policy) {
         // TODO log error
         return 1;

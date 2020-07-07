@@ -35,6 +35,7 @@ from bpfbox import defs
 
 DRIVER_PATH = os.path.join(defs.project_path, 'tests/driver')
 OPEN_PATH = os.path.join(DRIVER_PATH, 'open')
+IPC_PATH = os.path.join(DRIVER_PATH, 'ipc')
 
 @pytest.fixture
 def setup_testdir():
@@ -138,6 +139,26 @@ def test_open_implicit_taint(policy_generator: PolicyGenerator, setup_testdir):
 
     with pytest.raises(subprocess.CalledProcessError):
         subprocess.check_output([OPEN_PATH])
+
+
+@pytest.mark.skipif(not which('sleep'), reason='sleep not found on system')
+def test_ipc_policy(policy_generator: PolicyGenerator, setup_testdir):
+    sleep_path = which('sleep')
+    text = """
+    #![profile '%s']
+
+    #[taint]
+    signal(self, check)
+
+    signal('%s', kill)
+    """ % (IPC_PATH, sleep_path)
+
+    policy_generator.process_policy_text(text)
+
+    target_pid = subprocess.Popen([sleep_path, '10']).pid
+
+    rc = subprocess.Popen([IPC_PATH, 'kill-target', str(target_pid)]).wait()
+    assert rc == 0
 
 
 @pytest.mark.skipif(not which('sleep'), reason='sleep not found on system')

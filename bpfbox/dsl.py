@@ -26,7 +26,7 @@ from pyparsing import *
 
 from bpfbox.bpf_program import BPFProgram
 from bpfbox.logger import get_logger
-from bpfbox.flags import BPFBOX_ACTION, FS_ACCESS
+from bpfbox.flags import BPFBOX_ACTION, FS_ACCESS, IPC_ACCESS
 
 logger = get_logger()
 
@@ -36,8 +36,10 @@ comment = QuotedString(quoteChar='/*', endQuoteChar='*/', multiline=True).suppre
 lparen = Literal('(').suppress()
 rparen = Literal(')').suppress()
 
-fs_access = Word('rwaxligsu')('access')
-pathname = quoted_string('pathname')
+pathname = quoted_string
+
+fs_access = Word('rwaxligsu')
+signal_access = Group(Keyword('kill') | Keyword('chld') | Keyword('stop') | Keyword('misc') | Keyword('check'))
 
 
 class PolicyGenerator:
@@ -75,24 +77,27 @@ class PolicyGenerator:
             raise pe
 
     def _do_rule_common(self, rule):
+        rule_actions = [a for a in rule['macros'] if a in ['allow', 'taint', 'audit']]
+        if not 'taint' in rule_actions:
+            rule_actions.append('allow')
+        # fs rule
         if rule['type'] == 'fs':
             pathname = rule['pathname']
             access = FS_ACCESS.from_string(rule['access'])
-            rule_actions = [a for a in rule['macros'] if a in ['allow', 'taint', 'audit']]
-            # Assume allow if not a taint rule
-            if not 'taint' in rule_actions:
-                rule_actions.append('allow')
             action = BPFBOX_ACTION.from_actions(rule_actions)
             self.commands.append(lambda exe: self.bpf_program.add_fs_rule(exe, pathname, access, action))
+        # procfs rule
         elif rule['type'] == 'proc':
             pathname = rule['pathname']
             access = FS_ACCESS.from_string(rule['access'])
-            rule_actions = [a for a in rule['macros'] if a in ['allow', 'taint', 'audit']]
-            # Assume allow if not a taint rule
-            if not 'taint' in rule_actions:
-                rule_actions.append('allow')
             action = BPFBOX_ACTION.from_actions(rule_actions)
             self.commands.append(lambda exe: self.bpf_program.add_procfs_rule(exe, pathname, access, action))
+        # signal rule
+        elif rule['type'] == 'signal':
+            pathname = rule['pathname']
+            access = IPC_ACCESS.from_string(rule['access'])
+            action = BPFBOX_ACTION.from_actions(rule_actions)
+            self.commands.append(lambda exe: self.bpf_program.add_ipc_rule(exe, pathname, access, action))
         else:
             raise Exception('Unknown rule type')
 
@@ -125,9 +130,12 @@ class PolicyGenerator:
         # Blocks
         block = self._block().setParseAction(self._block_action)
 
-        return profile_macro & ZeroOrMore(
+        return ZeroOrMore(comment) + profile_macro + ZeroOrMore(
             (rule('rules*') | block('blocks*') | comment)
         )
+
+    def _self_exe(self, toks):
+        return self.exe
 
     def _macro_contents(self) -> ParserElement:
         taint = Keyword('taint')
@@ -146,21 +154,27 @@ class PolicyGenerator:
         return (
             rule_type
             + lparen
-            + pathname
+            + pathname('pathname')
             + comma
-            + fs_access
+            + fs_access('access')
             + rparen
         )
 
     def _procfs_rule(self) -> ParserElement:
         rule_type = Literal('proc')('type')
-        return rule_type + lparen + pathname + comma + fs_access + rparen
+        return rule_type + lparen + pathname('pathname') + comma + fs_access('access') + rparen
+
+    def _signal_rule(self) -> ParserElement:
+        rule_type = Literal('signal')('type')
+        pathname_or_self = pathname | Keyword('self').setParseAction(self._self_exe)
+        return rule_type + lparen + pathname_or_self('pathname') + comma + signal_access('access') + rparen
 
     def _rule(self) -> ParserElement:
         fs_rule = self._fs_rule()
         procfs_rule = self._procfs_rule()
+        signal_rule = self._signal_rule()
         # TODO add more rule types here
-        return Group(Group(ZeroOrMore(self._macro()))('macros') + (fs_rule | procfs_rule))
+        return Group(Group(ZeroOrMore(self._macro()))('macros') + (fs_rule | procfs_rule | signal_rule))
 
     def _block(self) -> ParserElement:
         begin = Literal('{').suppress()
