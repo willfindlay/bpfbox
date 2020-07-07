@@ -40,5 +40,41 @@ int main(int argc, char **argv)
         kill_or_die(target_pid, SIGKILL);
     }
 
+    if (!strcmp(argv[1], "check-self")) {
+        kill_or_die(getpid(), 0);
+    }
+
+    if (!strcmp(argv[1], "check-target")) {
+        int target_pid = atoi(argv[2]);
+        kill_or_die(target_pid, 0);
+    }
+
+    if (!strcmp(argv[1], "stop-self")) {
+        kill_or_die(getpid(), SIGSTOP);
+    }
+
+    if (!strcmp(argv[1], "stop-target")) {
+        int target_pid = atoi(argv[2]);
+        kill_or_die(target_pid, SIGSTOP);
+    }
+
+    if (!strcmp(argv[1], "chld-self")) {
+        kill_or_die(getpid(), SIGCHLD);
+    }
+
+    if (!strcmp(argv[1], "chld-target")) {
+        int target_pid = atoi(argv[2]);
+        kill_or_die(target_pid, SIGCHLD);
+    }
+
+    if (!strcmp(argv[1], "usr1-self")) {
+        kill_or_die(getpid(), SIGUSR1);
+    }
+
+    if (!strcmp(argv[1], "usr1-target")) {
+        int target_pid = atoi(argv[2]);
+        kill_or_die(target_pid, SIGUSR1);
+    }
+
     return 0;
 }
