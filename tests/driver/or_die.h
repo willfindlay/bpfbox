@@ -1,5 +1,6 @@
 #include <errno.h>
 #include <fcntl.h>
+#include <signal.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -112,4 +113,30 @@ void symlink_or_die(const char *old, const char *new)
         if (errno == EPERM)
             exit(1);
     }
+}
+
+int pipe_or_die(int pipefd[2])
+{
+    int rc = pipe(pipefd);
+
+    if (rc < 0) {
+        fprintf(stderr, "pipe() failed with %d\n", rc);
+        if (errno == EPERM)
+            exit(1);
+    }
+
+    return rc;
+}
+
+int kill_or_die(pid_t pid, int sig)
+{
+    int rc = kill(pid, sig);
+
+    if (rc < 0) {
+        fprintf(stderr, "kill(%d, %d) failed with %d\n", pid, sig, rc);
+        if (errno == EPERM)
+            exit(1);
+    }
+
+    return rc;
 }

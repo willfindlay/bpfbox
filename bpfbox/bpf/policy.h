@@ -93,6 +93,27 @@ struct bpfbox_procfs_policy_key_t {
 };
 
 /* =========================================================================
+ * IPC Policy
+ * ========================================================================= */
+
+enum bpfbox_ipc_access_t {
+    IPC_NONE = 0x00000000,
+    IPC_SIGCHLD = 0x00000001,
+    IPC_SIGKILL = 0x00000002,
+    IPC_SIGSTOP = 0x00000004,
+    IPC_SIGMISC = 0x00000008,
+    IPC_SIGCHECK = 0x00000010,
+    IPC_PTRACE = 0x00000020,
+};
+#define IPC_SIGANY \
+    (IPC_SIGCHLD | IPC_SIGKILL | IPC_SIGSTOP | IPC_SIGMISC | IPC_SIGCHECK)
+
+struct bpfbox_ipc_policy_key_t {
+    u64 subject_key;
+    u64 object_key;
+};
+
+/* =========================================================================
  * Audit Data Structures
  * ========================================================================= */
 
@@ -117,12 +138,20 @@ struct bpfbox_procfs_policy_key_t {
         event->pid = process->pid;                 \
         event->profile_key = process->profile_key; \
         event->action = action;                    \
+        event->access = access;                    \
     } while (0)
 
 /* for auditing inode events */
 struct bpfbox_fs_audit_event_t {
-    STRUCT_AUDIT_COMMON
-    u32 st_ino;
+    STRUCT_AUDIT_COMMON u32 st_ino;
     u32 st_dev;
     char s_id[32];
+};
+
+/* for auditing ipc */
+struct bpfbox_ipc_audit_event_t {
+    STRUCT_AUDIT_COMMON
+    u32 object_uid;
+    u32 object_pid;
+    u64 object_profile_key;
 };

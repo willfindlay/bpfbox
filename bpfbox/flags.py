@@ -110,4 +110,31 @@ class FS_ACCESS(Flag):
                 logger.warning('Unknown access "%s"' % (ell))
         return access
 
+@unique
+class IPC_ACCESS(Flag):
+    NONE = 0x00000000
+    SIGCHLD = 0x00000001
+    SIGKILL = 0x00000002
+    SIGSTOP = 0x00000004
+    SIGMISC = 0x00000008
+    SIGCHECK = 0x00000010
+    PTRACE = 0x00000020
+
+    @staticmethod
+    def from_string(s: str):
+        access_map = {
+            'kill': IPC_ACCESS.SIGKILL,
+            'chld': IPC_ACCESS.SIGCHLD,
+            'stop': IPC_ACCESS.SIGSTOP,
+            'misc': IPC_ACCESS.SIGMISC,
+            'check': IPC_ACCESS.SIGCHECK,
+            'ptrace': IPC_ACCESS.PTRACE,
+        }
+        access = IPC_ACCESS.NONE
+        for ell in s:
+            try:
+                access |= access_map[ell]
+            except:
+                logger.warning('Unknown access "%s"' % (ell))
+        return access
 

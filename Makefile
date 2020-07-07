@@ -6,7 +6,7 @@ install: package libebph
 	echo "Not yet implemented"
 
 .PHONY: package
-package: libebph
+package: libbpfbox
 	pip3 install -e . -r requirements.txt
 
 .PHONY: libbpfbox

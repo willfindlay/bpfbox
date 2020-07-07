@@ -30,7 +30,7 @@ from bcc import BPF
 
 from bpfbox import defs
 from bpfbox.logger import get_logger
-from bpfbox.flags import BPFBOX_ACTION, FS_ACCESS
+from bpfbox.flags import BPFBOX_ACTION, FS_ACCESS, IPC_ACCESS
 from bpfbox.utils import calculate_profile_key, get_inode_and_device, which
 from bpfbox.libbpfbox import lib, register_uprobes
 
@@ -146,8 +146,14 @@ class BPFProgram:
         except AttributeError:
             logger.warning("Unable to properly clean up BPF program")
 
-    def _format_exe(self, profile_key, pid, uid):
-        return '%s (%d, %d)' % (self.profile_key_to_exe[profile_key], pid, uid)
+    def _format_exe(self, profile_key, pid=None, uid=None):
+        if pid is None:
+            return self.profile_key_to_exe[profile_key]
+        if uid is None:
+            extra_info = '(%d)' % (pid)
+        else:
+            extra_info = '(%d, %d)' % (pid, uid)
+        return '%s %s' % (self.profile_key_to_exe[profile_key], extra_info)
 
     def _format_dev(self, s_id, st_dev):
         return '%d (%s)' % (st_dev, s_id)
@@ -168,17 +174,29 @@ class BPFProgram:
                 )
             )
 
+        @ringbuf_callback(self.bpf, 'ipc_audit_events')
+        def ipc_audit_events(ctx, event, size):
+            logger.audit(
+                'action=%s access=IPC_%s exe=%s target=%s'
+                % (
+                    BPFBOX_ACTION(event.action),
+                    IPC_ACCESS(event.access),
+                    self._format_exe(event.profile_key, event.pid, event.uid),
+                    self._format_exe(event.object_profile_key, event.object_pid, event.object_uid),
+                )
+            )
+
         # Debugging below this line
         if not self.debug:
             return
 
-        @ringbuf_callback(self.bpf, 'debug_task_to_inode')
-        def debug_task_to_inode(ctx, event, size):
+        @ringbuf_callback(self.bpf, 'task_to_inode_debug_events')
+        def task_to_inode_debug_events(ctx, event, size):
             logger.debug(
                 'task_to_inode: subject=%s object=%s inode=%d'
                 % (
-                    self._format_exe(event.subject_key, event.pid, -1),
-                    self._format_exe(event.object_key, event.other_pid, -1),
+                    self._format_exe(event.subject_key, event.subject_pid),
+                    self._format_exe(event.object_key, event.object_pid),
                     event.st_ino,
                 )
             )
@@ -261,14 +279,18 @@ class BPFProgram:
         # for key, process in self.bpf[b'processes'].iteritems():
         #    logger.debug(key)
 
+    def _calculate_profile_key(self, exe):
+        profile_key = calculate_profile_key(exe)
+        self.profile_key_to_exe[profile_key] = exe
+        return profile_key
+
     def _add_profile(self, profile_key: int, taint_on_exec: int) -> int:
         assert self.have_registered_uprobes
         lib.add_profile(profile_key, taint_on_exec)
         return 0
 
     def add_profile(self, exe: str, taint_on_exec: bool) -> int:
-        profile_key = calculate_profile_key(exe)
-        self.profile_key_to_exe[profile_key] = exe
+        profile_key = self._calculate_profile_key(exe)
         return self._add_profile(profile_key, taint_on_exec)
 
     def _add_fs_rule(
@@ -297,7 +319,7 @@ class BPFProgram:
         access_mask: FS_ACCESS,
         action: BPFBOX_ACTION = BPFBOX_ACTION.ALLOW,
     ) -> int:
-        profile_key = calculate_profile_key(exe)
+        profile_key = self._calculate_profile_key(exe)
         try:
             st_ino, st_dev = get_inode_and_device(path)
         except FileNotFoundError:
@@ -356,8 +378,39 @@ class BPFProgram:
         access: FS_ACCESS,
         action: BPFBOX_ACTION = BPFBOX_ACTION.ALLOW,
     ):
-        subject_profile_key = calculate_profile_key(subject_exe)
-        object_profile_key = calculate_profile_key(object_exe)
+        subject_profile_key = self._calculate_profile_key(subject_exe)
+        object_profile_key = self._calculate_profile_key(object_exe)
         self._add_procfs_rule(
+            subject_profile_key, object_profile_key, access, action
+        )
+
+    def _add_ipc_rule(
+        self,
+        subject_profile_key: int,
+        object_profile_key: int,
+        access: IPC_ACCESS,
+        action: BPFBOX_ACTION,
+    ) -> int:
+        assert self.have_registered_uprobes
+        if action & (BPFBOX_ACTION.DENY | BPFBOX_ACTION.COMPLAIN):
+            logger.error(
+                '_add_ipc_rule: Action must be one of ALLOW, TAINT, or AUDIT'
+            )
+            return 1
+        lib.add_ipc_rule(
+            subject_profile_key, object_profile_key, access.value, action.value
+        )
+        return 0
+
+    def add_ipc_rule(
+        self,
+        subject_exe: str,
+        object_exe: str,
+        access: IPC_ACCESS,
+        action: BPFBOX_ACTION = BPFBOX_ACTION.ALLOW,
+    ):
+        subject_profile_key = self._calculate_profile_key(subject_exe)
+        object_profile_key = self._calculate_profile_key(object_exe)
+        self._add_ipc_rule(
             subject_profile_key, object_profile_key, access, action
         )
