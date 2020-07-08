@@ -25,7 +25,7 @@ from pyparsing import ParseException, Group
 from bpfbox.dsl import PolicyGenerator
 from pprint import pprint
 
-parser = PolicyGenerator(None)
+parser = PolicyGenerator()
 
 def test_macro_smoke():
     macro = parser._macro()

@@ -27,6 +27,7 @@ from pyparsing import *
 from bpfbox.bpf_program import BPFProgram
 from bpfbox.logger import get_logger
 from bpfbox.flags import BPFBOX_ACTION, FS_ACCESS, IPC_ACCESS
+from bpfbox.libbpfbox import Commands
 
 logger = get_logger()
 
@@ -43,8 +44,7 @@ signal_access = Group(Keyword('kill') | Keyword('chld') | Keyword('stop') | Keyw
 
 
 class RuleBase:
-    def __init__(self, bpf_program: BPFProgram, rule_dict: Dict):
-        self.bpf_program = bpf_program
+    def __init__(self, rule_dict: Dict):
         self.rule_dict = rule_dict
 
         self.rule_actions = [a for a in self.rule_dict['macros'] if a in ['allow', 'taint', 'audit']]
@@ -55,34 +55,34 @@ class RuleBase:
         raise NotImplementedError('Rules must implement __call__')
 
 class FSRule(RuleBase):
-    def __init__(self, bpf_program: BPFProgram, rule_dict: Dict):
-        super().__init__(bpf_program, rule_dict)
+    def __init__(self, rule_dict: Dict):
+        super().__init__(rule_dict)
 
     def __call__(self, exe):
         pathname = self.rule_dict['pathname']
         access = FS_ACCESS.from_string(self.rule_dict['access'])
         action = BPFBOX_ACTION.from_actions(self.rule_actions)
-        self.bpf_program.add_fs_rule(exe, pathname, access, action)
+        Commands.add_fs_rule(exe, pathname, access, action)
 
 class ProcFSRule(RuleBase):
-    def __init__(self, bpf_program: BPFProgram, rule_dict: Dict):
-        super().__init__(bpf_program, rule_dict)
+    def __init__(self, rule_dict: Dict):
+        super().__init__(rule_dict)
 
     def __call__(self, exe):
         pathname = self.rule_dict['pathname']
         access = FS_ACCESS.from_string(self.rule_dict['access'])
         action = BPFBOX_ACTION.from_actions(self.rule_actions)
-        self.bpf_program.add_procfs_rule(exe, pathname, access, action)
+        Commands.add_procfs_rule(exe, pathname, access, action)
 
 class SignalRule(RuleBase):
-    def __init__(self, bpf_program: BPFProgram, rule_dict: Dict):
-        super().__init__(bpf_program, rule_dict)
+    def __init__(self, rule_dict: Dict):
+        super().__init__(rule_dict)
 
     def __call__(self, exe):
         pathname = self.rule_dict['pathname']
         access = IPC_ACCESS.from_string(self.rule_dict['access'])
         action = BPFBOX_ACTION.from_actions(self.rule_actions)
-        self.bpf_program.add_ipc_rule(exe, pathname, access, action)
+        Commands.add_ipc_rule(exe, pathname, access, action)
 
 
 class PolicyGenerator:
@@ -90,8 +90,7 @@ class PolicyGenerator:
     Parses policy files and generates rules for the BPF programs to enforce.
     """
 
-    def __init__(self, bpf_program: BPFProgram):
-        self.bpf_program = bpf_program
+    def __init__(self):
         self.bnf = self._make_bnf()
         self.exe = None
         self.rules = []
@@ -118,11 +117,11 @@ class PolicyGenerator:
 
     def _add_rule(self, rule_dict):
         if rule_dict['type'] == 'fs':
-            rule = FSRule(self.bpf_program, rule_dict)
+            rule = FSRule(rule_dict)
         elif rule_dict['type'] == 'proc':
-            rule = ProcFSRule(self.bpf_program, rule_dict)
+            rule = ProcFSRule(rule_dict)
         elif rule_dict['type'] == 'signal':
-            rule = SignalRule(self.bpf_program, rule_dict)
+            rule = SignalRule(rule_dict)
         else:
             raise Exception('Unknown rule type %s' % (rule_dict['type']))
         self.rules.append(rule)
@@ -139,8 +138,10 @@ class PolicyGenerator:
 
     def _profile_macro_action(self, toks):
         self.exe = toks[0]
-        if self.bpf_program:
-            self.bpf_program.add_profile(self.exe, True)
+        try:
+            Commands.add_profile(self.exe, True)
+        except:
+            pass
 
     def _make_bnf(self) -> ParserElement:
         # Special required macro for profile

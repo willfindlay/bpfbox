@@ -6,6 +6,7 @@ from bpfbox.argument_parser import parse_args
 from bpfbox.bpf_program import BPFProgram
 from bpfbox.logger import BPFBoxLoggerClass
 from bpfbox import defs
+from bpfbox.utils import profile_key_to_exe
 
 AUDIT = BPFBoxLoggerClass.AUDIT
 DEBUG = logging.DEBUG
@@ -34,4 +35,4 @@ def bpf_program(caplog):
     b.bpf['ipc_policy'].clear()
     # IMPORTANT NOTE: remember to put new maps here
 
-    b.profile_key_to_exe.clear()
+    profile_key_to_exe.clear()

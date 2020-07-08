@@ -31,8 +31,8 @@ from bcc import BPF
 from bpfbox import defs
 from bpfbox.logger import get_logger
 from bpfbox.flags import BPFBOX_ACTION, FS_ACCESS, IPC_ACCESS
-from bpfbox.utils import calculate_profile_key, get_inode_and_device, which
-from bpfbox.libbpfbox import lib, register_uprobes
+from bpfbox.utils import calculate_profile_key, get_inode_and_device, which, profile_key_to_exe
+from bpfbox.libbpfbox import register_uprobes
 
 logger = get_logger()
 
@@ -55,7 +55,6 @@ class BPFProgram:
         self.debug = debug
         self.show_ebpf = show_ebpf
         self.enforcing = enforcing
-        self.profile_key_to_exe = defaultdict(lambda: '[unknown]')
         self.have_registered_uprobes = False
 
     def do_tick(self) -> None:
@@ -148,12 +147,12 @@ class BPFProgram:
 
     def _format_exe(self, profile_key, pid=None, uid=None):
         if pid is None:
-            return self.profile_key_to_exe[profile_key]
+            return profile_key_to_exe[profile_key]
         if uid is None:
             extra_info = '(%d)' % (pid)
         else:
             extra_info = '(%d, %d)' % (pid, uid)
-        return '%s %s' % (self.profile_key_to_exe[profile_key], extra_info)
+        return '%s %s' % (profile_key_to_exe[profile_key], extra_info)
 
     def _format_dev(self, s_id, st_dev):
         return '%d (%s)' % (st_dev, s_id)
@@ -278,139 +277,3 @@ class BPFProgram:
         # logger.debug('Dumping processes...')
         # for key, process in self.bpf[b'processes'].iteritems():
         #    logger.debug(key)
-
-    def _calculate_profile_key(self, exe):
-        profile_key = calculate_profile_key(exe)
-        self.profile_key_to_exe[profile_key] = exe
-        return profile_key
-
-    def _add_profile(self, profile_key: int, taint_on_exec: int) -> int:
-        assert self.have_registered_uprobes
-        lib.add_profile(profile_key, taint_on_exec)
-        return 0
-
-    def add_profile(self, exe: str, taint_on_exec: bool) -> int:
-        profile_key = self._calculate_profile_key(exe)
-        return self._add_profile(profile_key, taint_on_exec)
-
-    def _add_fs_rule(
-        self,
-        profile_key: int,
-        st_ino: int,
-        st_dev: int,
-        access_mask: FS_ACCESS,
-        action: BPFBOX_ACTION,
-    ) -> int:
-        assert self.have_registered_uprobes
-        if (action & (BPFBOX_ACTION.DENY | BPFBOX_ACTION.COMPLAIN)):
-            logger.error(
-                '_add_fs_rule: Action must be one of ALLOW, TAINT, or AUDIT'
-            )
-            return 1
-        lib.add_fs_rule(
-            profile_key, st_ino, st_dev, access_mask.value, action.value
-        )
-        return 0
-
-    def add_fs_rule(
-        self,
-        exe: str,
-        path: str,
-        access_mask: FS_ACCESS,
-        action: BPFBOX_ACTION = BPFBOX_ACTION.ALLOW,
-    ) -> int:
-        profile_key = self._calculate_profile_key(exe)
-        try:
-            st_ino, st_dev = get_inode_and_device(path)
-        except FileNotFoundError:
-            logger.warning('add_fs_rule: Unable to find file %s' % (path))
-            return -1
-
-        self._add_fs_rule(profile_key, st_ino, st_dev, access_mask, action)
-
-        if not (action & BPFBOX_ACTION.ALLOW):
-            return 0
-
-        # Handle full path access
-        # FIXME: is this the best way to do this?
-        try:
-            head = os.readlink(path)
-        except OSError:
-            head = path
-        while True:
-            head, tail = os.path.split(head)
-            if not head:
-                break
-            try:
-                st_ino, st_dev = get_inode_and_device(head)
-            except FileNotFoundError:
-                logger.warning('add_fs_rule: Unable to find file %s' % (head))
-                continue
-            access_mask = FS_ACCESS.EXEC
-            self._add_fs_rule(
-                profile_key, st_ino, st_dev, access_mask, BPFBOX_ACTION.ALLOW
-            )
-            if not tail:
-                break
-
-    def _add_procfs_rule(
-        self,
-        subject_profile_key: int,
-        object_profile_key: int,
-        access: FS_ACCESS,
-        action: BPFBOX_ACTION,
-    ) -> int:
-        assert self.have_registered_uprobes
-        if action & (BPFBOX_ACTION.DENY | BPFBOX_ACTION.COMPLAIN):
-            logger.error(
-                '_add_procfs_rule: Action must be one of ALLOW, TAINT, or AUDIT'
-            )
-            return 1
-        lib.add_procfs_rule(
-            subject_profile_key, object_profile_key, access.value, action.value
-        )
-        return 0
-
-    def add_procfs_rule(
-        self,
-        subject_exe: str,
-        object_exe: str,
-        access: FS_ACCESS,
-        action: BPFBOX_ACTION = BPFBOX_ACTION.ALLOW,
-    ):
-        subject_profile_key = self._calculate_profile_key(subject_exe)
-        object_profile_key = self._calculate_profile_key(object_exe)
-        self._add_procfs_rule(
-            subject_profile_key, object_profile_key, access, action
-        )
-
-    def _add_ipc_rule(
-        self,
-        subject_profile_key: int,
-        object_profile_key: int,
-        access: IPC_ACCESS,
-        action: BPFBOX_ACTION,
-    ) -> int:
-        assert self.have_registered_uprobes
-        if action & (BPFBOX_ACTION.DENY | BPFBOX_ACTION.COMPLAIN):
-            logger.error(
-                '_add_ipc_rule: Action must be one of ALLOW, TAINT, or AUDIT'
-            )
-            return 1
-        lib.add_ipc_rule(
-            subject_profile_key, object_profile_key, access.value, action.value
-        )
-        return 0
-
-    def add_ipc_rule(
-        self,
-        subject_exe: str,
-        object_exe: str,
-        access: IPC_ACCESS,
-        action: BPFBOX_ACTION = BPFBOX_ACTION.ALLOW,
-    ):
-        subject_profile_key = self._calculate_profile_key(subject_exe)
-        object_profile_key = self._calculate_profile_key(object_exe)
-        self._add_ipc_rule(
-            subject_profile_key, object_profile_key, access, action
-        )

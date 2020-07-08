@@ -32,6 +32,8 @@
 import os
 import sys
 import ctypes as ct
+from bpfbox.flags import BPFBOX_ACTION, FS_ACCESS, IPC_ACCESS
+from bpfbox.utils import calculate_profile_key, get_inode_and_device
 
 from bpfbox import defs
 from bpfbox.logger import get_logger
@@ -59,6 +61,9 @@ _add_command('add_procfs_rule', [ct.c_ulonglong, ct.c_ulonglong, ct.c_ulong, ct.
 _add_command('add_ipc_rule', [ct.c_ulonglong, ct.c_ulonglong, ct.c_ulong, ct.c_uint])
 
 
+have_registered_uprobes = False
+
+
 def register_uprobes(bpf):
     for item in commands:
         command, argtypes, restype = item
@@ -68,7 +73,81 @@ def register_uprobes(bpf):
             name=defs.libbpfbox, sym=command, pid=os.getpid(), fn_name=command
         )
         logger.debug(f'Registered uprobe for {command}.')
+    global have_registered_uprobes
+    have_registered_uprobes = True
 
 
-# TODO: move command wrappers in here
-#class Commands:
+class Commands:
+    @staticmethod
+    def add_profile(exe: str, taint_on_exec: bool) -> int:
+        assert have_registered_uprobes
+
+        profile_key = calculate_profile_key(exe)
+        lib.add_profile(profile_key, taint_on_exec)
+
+    @staticmethod
+    def add_fs_rule(
+        exe: str,
+        path: str,
+        access: FS_ACCESS,
+        action: BPFBOX_ACTION = BPFBOX_ACTION.ALLOW,
+    ) -> int:
+        assert have_registered_uprobes
+
+        profile_key = calculate_profile_key(exe)
+        st_ino, st_dev = get_inode_and_device(path)
+
+        lib.add_fs_rule(profile_key, st_ino, st_dev, access.value, action.value)
+
+        if not (action & BPFBOX_ACTION.ALLOW):
+            return
+
+        # Handle full path access
+        # FIXME: is this the best way to do this?
+        try:
+            head = os.readlink(path)
+        except OSError:
+            head = path
+        while True:
+            head, tail = os.path.split(head)
+            if not head:
+                break
+            try:
+                st_ino, st_dev = get_inode_and_device(head)
+            except FileNotFoundError:
+                continue
+            access = FS_ACCESS.EXEC
+            action = BPFBOX_ACTION.ALLOW
+            lib.add_fs_rule(profile_key, st_ino, st_dev, access.value, action.value)
+            if not tail:
+                break
+
+    def add_procfs_rule(
+        subject_exe: str,
+        object_exe: str,
+        access: FS_ACCESS,
+        action: BPFBOX_ACTION = BPFBOX_ACTION.ALLOW,
+    ):
+        assert have_registered_uprobes
+
+        subject_profile_key = calculate_profile_key(subject_exe)
+        object_profile_key = calculate_profile_key(object_exe)
+
+        lib.add_procfs_rule(
+            subject_profile_key, object_profile_key, access.value, action.value
+        )
+
+    def add_ipc_rule(
+        subject_exe: str,
+        object_exe: str,
+        access: IPC_ACCESS,
+        action: BPFBOX_ACTION = BPFBOX_ACTION.ALLOW,
+    ):
+        assert have_registered_uprobes
+
+        subject_profile_key = calculate_profile_key(subject_exe)
+        object_profile_key = calculate_profile_key(object_exe)
+
+        lib.add_ipc_rule(
+            subject_profile_key, object_profile_key, access.value, action.value
+        )
