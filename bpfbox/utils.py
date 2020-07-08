@@ -27,6 +27,10 @@ import sys
 import itertools
 import signal
 import subprocess
+from collections import defaultdict
+
+
+profile_key_to_exe = defaultdict(lambda: '[unknown]')
 
 
 def get_inode_and_device(path, follow_symlink=True):
@@ -43,7 +47,9 @@ def calculate_profile_key(path, follow_symlink=True):
     logic as bpf_program.c
     """
     st_ino, st_dev = get_inode_and_device(path, follow_symlink)
-    return st_ino | (st_dev << 32)
+    profile_key = st_ino | (st_dev << 32)
+    profile_key_to_exe[profile_key] = path
+    return profile_key
 
 
 def check_root():

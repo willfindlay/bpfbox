@@ -49,7 +49,7 @@ def setup_testdir():
 
 @pytest.fixture
 def policy_generator(bpf_program: BPFProgram):
-    yield PolicyGenerator(bpf_program)
+    yield PolicyGenerator()
 
 
 def test_open_complex_policy_no_execute_permission(policy_generator: PolicyGenerator, setup_testdir):
