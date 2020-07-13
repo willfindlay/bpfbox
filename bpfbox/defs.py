@@ -39,8 +39,8 @@ ticksleep = 0.1
 # Path to working directory
 working_directory = '/var/lib/bpfbox'
 
-# Path to profiles directory
-profiles_directory = os.path.join(working_directory, 'policy')
+# Path to policy directory
+policy_directory = os.path.join(working_directory, 'policy')
 
 # Path to pidfile
 pidfile = '/var/run/bpfboxd.pid'
@@ -81,11 +81,11 @@ def init(args):
     except OSError:
         os.chmod(working_directory, mode=0o1700)
 
-    # Make profiles_directory or set permissions of existing profiles_directory
+    # Make policy_directory or set permissions of existing policy_directory
     try:
-        os.makedirs(profiles_directory, mode=0o1700, exist_ok=True)
+        os.makedirs(policy_directory, mode=0o1700, exist_ok=True)
     except OSError:
-        os.chmod(profiles_directory, mode=0o1700)
+        os.chmod(policy_directory, mode=0o1700)
 
     from bpfbox.logger import setup_logger
 

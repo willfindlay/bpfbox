@@ -84,6 +84,16 @@ class SignalRule(RuleBase):
         action = BPFBOX_ACTION.from_actions(self.rule_actions)
         Commands.add_ipc_rule(exe, pathname, access, action)
 
+class PtraceRule(RuleBase):
+    def __init__(self, rule_dict: Dict):
+        super().__init__(rule_dict)
+
+    def __call__(self, exe):
+        pathname = self.rule_dict['pathname']
+        access = IPC_ACCESS.PTRACE
+        action = BPFBOX_ACTION.from_actions(self.rule_actions)
+        Commands.add_ipc_rule(exe, pathname, access, action)
+
 
 class PolicyGenerator:
     """
@@ -122,6 +132,8 @@ class PolicyGenerator:
             rule = ProcFSRule(rule_dict)
         elif rule_dict['type'] == 'signal':
             rule = SignalRule(rule_dict)
+        elif rule_dict['type'] == 'ptrace':
+            rule = PtraceRule(rule_dict)
         else:
             raise Exception('Unknown rule type %s' % (rule_dict['type']))
         self.rules.append(rule)
@@ -198,12 +210,18 @@ class PolicyGenerator:
         pathname_or_self = pathname | Keyword('self').setParseAction(self._self_exe)
         return rule_type + lparen + pathname_or_self('pathname') + comma + signal_access('access') + rparen
 
+    def _ptrace_rule(self) -> ParserElement:
+        rule_type = Literal('ptrace')('type')
+        pathname_or_self = pathname | Keyword('self').setParseAction(self._self_exe)
+        return rule_type + lparen + pathname_or_self('pathname') + rparen
+
     def _rule(self) -> ParserElement:
         fs_rule = self._fs_rule()
         procfs_rule = self._procfs_rule()
         signal_rule = self._signal_rule()
+        ptrace_rule = self._ptrace_rule()
         # TODO add more rule types here
-        return Group(Group(ZeroOrMore(self._macro()))('macros') + (fs_rule | procfs_rule | signal_rule))
+        return Group(Group(ZeroOrMore(self._macro()))('macros') + (fs_rule | procfs_rule | signal_rule | ptrace_rule))
 
     def _block(self) -> ParserElement:
         begin = Literal('{').suppress()

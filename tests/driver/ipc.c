@@ -76,5 +76,14 @@ int main(int argc, char **argv)
         kill_or_die(target_pid, SIGUSR1);
     }
 
+    if (!strcmp(argv[1], "traceme")) {
+        int pid = fork();
+
+        if (pid) {
+        } else {
+            ptrace_or_die(PTRACE_TRACEME, 0, NULL, NULL);
+        }
+    }
+
     return 0;
 }
