@@ -7,6 +7,7 @@
 #include <sys/stat.h>
 #include <sys/types.h>
 #include <sys/wait.h>
+#include <sys/ptrace.h>
 #include <unistd.h>
 
 int open_or_die(const char *path, int flags)
@@ -134,6 +135,19 @@ int kill_or_die(pid_t pid, int sig)
 
     if (rc < 0) {
         fprintf(stderr, "kill(%d, %d) failed with %d\n", pid, sig, rc);
+        if (errno == EPERM)
+            exit(1);
+    }
+
+    return rc;
+}
+
+long ptrace_or_die(enum __ptrace_request request, pid_t pid, void *addr, void *data)
+{
+    long rc = ptrace(request, pid, addr, data);
+
+    if (rc < 0) {
+        fprintf(stderr, "ptrace(%d, %d, %x, %x) failed with %d\n", request, pid, addr, data);
         if (errno == EPERM)
             exit(1);
     }

@@ -740,6 +740,93 @@ out:
     return action & ACTION_DENY ? -EPERM : 0;
 }
 
+LSM_PROBE(ptrace_access_check, struct task_struct *target, unsigned int mode)
+{
+    struct bpfbox_process_t *subject_process = get_current_process();
+
+    u32 target_pid = target->pid;
+    struct bpfbox_process_t *object_process = processes.lookup(&target_pid);
+
+    enum bpfbox_ipc_access_t access = IPC_PTRACE;
+
+    // Neither task is confined
+    if (!subject_process && !object_process) {
+        return 0;
+    }
+
+    // An unconfined task is attempting to ptrace a confined task
+    if (!subject_process) {
+        return 0;
+    }
+
+    enum bpfbox_action_t action;
+
+    // An confined task is attempting to ptrace an "unconfined" task
+    if (!object_process) {
+        struct bpfbox_process_t unknown = {
+            .pid = target->pid,
+            .tgid = target->tgid,
+            .profile_key = 0,
+            .tainted = 0,
+        };
+#ifdef BPFBOX_ENFORCING
+        action = ACTION_DENY;
+#else
+        action = ACTION_COMPLAIN;
+#endif
+        audit_ipc(subject_process, &unknown, target->cred->uid.val, access,
+                  action);
+        goto out;
+    }
+
+    action = ipc_policy_decision(subject_process, object_process, access);
+    audit_ipc(subject_process, object_process, target->cred->uid.val, access,
+              action);
+
+out:
+    return action & ACTION_DENY ? -EPERM : 0;
+}
+
+
+LSM_PROBE(ptrace_traceme, struct task_struct *parent)
+{
+    struct bpfbox_process_t *object_process = get_current_process();
+
+    u32 parent_pid = parent->pid;
+    struct bpfbox_process_t *subject_process = processes.lookup(&parent_pid);
+
+    enum bpfbox_ipc_access_t access = IPC_PTRACE;
+
+    // Neither task is confined
+    if (!subject_process && !object_process) {
+        return 0;
+    }
+
+    // An unconfined task is attempting to ptrace a confined task
+    if (!subject_process) {
+        return 0;
+    }
+
+    enum bpfbox_action_t action;
+
+    // An confined task is attempting to ptrace an "unconfined" task
+    if (!object_process) {
+#ifdef BPFBOX_ENFORCING
+        action = ACTION_DENY;
+#else
+        action = ACTION_COMPLAIN;
+#endif
+        goto out;
+    }
+
+    action = ipc_policy_decision(subject_process, object_process, access);
+    audit_ipc(subject_process, object_process, bpf_get_current_uid_gid(), access,
+              action);
+
+out:
+    return action & ACTION_DENY ? -EPERM : 0;
+}
+
 /* =========================================================================
  * Process/Profile Creation and Related Bookkeeping
  * ========================================================================= */

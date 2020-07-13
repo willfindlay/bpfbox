@@ -56,6 +56,8 @@ class BPFProgram:
         self.show_ebpf = show_ebpf
         self.enforcing = enforcing
         self.have_registered_uprobes = False
+        from bpfbox.dsl import PolicyGenerator
+        self.policy_generator = PolicyGenerator()
 
     def do_tick(self) -> None:
         """do_tick.
@@ -208,7 +210,16 @@ class BPFProgram:
 
     def _generate_policy(self):
         logger.info('Generating policy...')
-        logger.warning('TODO')
+        policy_files = []
+        for (dirpath, dirnames, filenames) in os.walk(defs.policy_directory):
+            policy_files.extend([os.path.join(dirpath, f) for f in filenames if f.endswith('.bpfbox')])
+        for f in policy_files:
+            logger.info(f'Generating policy for {f}...')
+            try:
+                self.policy_generator.process_policy_file(f)
+            except:
+                logger.error(f'Unable to generate policy for {f}!')
+        logger.info('Generated policy successfully!')
 
     def _set_cflags(self, maps_pinned):
         flags = []
