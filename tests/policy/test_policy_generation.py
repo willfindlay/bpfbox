@@ -36,6 +36,7 @@ from bpfbox import defs
 DRIVER_PATH = os.path.join(defs.project_path, 'tests/driver')
 OPEN_PATH = os.path.join(DRIVER_PATH, 'open')
 IPC_PATH = os.path.join(DRIVER_PATH, 'ipc')
+NET_PATH = os.path.join(DRIVER_PATH, 'net')
 
 @pytest.fixture
 def setup_testdir():
@@ -57,12 +58,12 @@ def test_open_complex_policy_no_execute_permission(policy_generator: PolicyGener
     #![profile '%s']
 
     #[taint]
-    fs('/tmp/bpfbox/a', r)
+    fs('/tmp/bpfbox/a', read)
 
     #[allow] {
-        fs('/tmp/bpfbox/a', rw)
-        fs('/tmp/bpfbox/b', a)
-        fs('/tmp/bpfbox/c', r)
+        fs('/tmp/bpfbox/a', read|write)
+        fs('/tmp/bpfbox/b', append)
+        fs('/tmp/bpfbox/c', read)
     }
 
     """ % (OPEN_PATH)
@@ -78,13 +79,13 @@ def test_open_complex_policy(policy_generator: PolicyGenerator, setup_testdir):
     #![profile '%s']
 
     #[taint]
-    fs('/tmp/bpfbox/a', r)
+    fs('/tmp/bpfbox/a', read)
 
     #[allow] {
-        fs('/tmp/bpfbox/a', rw)
-        fs('/tmp/bpfbox/b', a)
-        fs('/tmp/bpfbox/c', r)
-        fs('/tmp/bpfbox/d', x)
+        fs('/tmp/bpfbox/a', read|write)
+        fs('/tmp/bpfbox/b', append)
+        fs('/tmp/bpfbox/c', read)
+        fs('/tmp/bpfbox/d', exec)
     }
 
     """ % (OPEN_PATH)
@@ -99,12 +100,12 @@ def test_open_complex_policy_implicit_allow(policy_generator: PolicyGenerator, s
     #![profile '%s']
 
     #[taint]
-    fs('/tmp/bpfbox/a', r)
+    fs('/tmp/bpfbox/a', read)
 
-    fs('/tmp/bpfbox/a', rw)
-    fs('/tmp/bpfbox/b', a)
-    fs('/tmp/bpfbox/c', r)
-    fs('/tmp/bpfbox/d', x)
+    fs('/tmp/bpfbox/a', read|write)
+    fs('/tmp/bpfbox/b', append)
+    fs('/tmp/bpfbox/c', read)
+    fs('/tmp/bpfbox/d', exec)
 
     """ % (OPEN_PATH)
 
@@ -118,10 +119,10 @@ def test_open_link_policy(policy_generator: PolicyGenerator, setup_testdir):
     #![profile '%s']
 
     #[taint]
-    fs('/tmp/bpfbox/a', r)
+    fs('/tmp/bpfbox/a', read)
 
-    fs('/tmp/bpfbox', w)
-    fs('/tmp/bpfbox/a', l)
+    fs('/tmp/bpfbox', write)
+    fs('/tmp/bpfbox/a', link)
 
     """ % (OPEN_PATH)
 
@@ -148,9 +149,9 @@ def test_ipc_policy(policy_generator: PolicyGenerator, setup_testdir):
     #![profile '%s']
 
     #[taint]
-    signal(self, check)
+    signal(self, sigcheck)
 
-    signal('%s', kill)
+    signal('%s', sigkill)
     """ % (IPC_PATH, sleep_path)
 
     policy_generator.process_policy_text(text)
@@ -169,10 +170,10 @@ def test_open_procfs_rules(policy_generator: PolicyGenerator, setup_testdir):
     #![profile '%s']
 
     #[taint]
-    fs('/tmp/bpfbox/a', r)
+    fs('/tmp/bpfbox/a', read)
 
-    fs('/proc', x)
-    proc('%s', rx)
+    fs('/proc', exec)
+    proc('%s', read|exec)
     """ % (OPEN_PATH, sleep_path)
 
     policy_generator.process_policy_text(text)
@@ -192,9 +193,9 @@ def test_open_proc_other_not_allowed(policy_generator: PolicyGenerator, setup_te
     #![profile '%s']
 
     #[taint]
-    fs('/tmp/bpfbox/a', r)
+    fs('/tmp/bpfbox/a', read)
 
-    fs('/proc', x)
+    fs('/proc', exec)
     """ % (OPEN_PATH)
 
     policy_generator.process_policy_text(text)
@@ -206,42 +207,6 @@ def test_open_proc_other_not_allowed(policy_generator: PolicyGenerator, setup_te
     with pytest.raises(subprocess.CalledProcessError):
         subprocess.check_call([OPEN_PATH, 'proc-other', str(sleep_pid)])
 
-
-@pytest.mark.skipif(not which('exa'), reason='exa not found on system')
-def test_exa_profile(policy_generator: PolicyGenerator, setup_testdir):
-    exa = which('exa')
-
-    text = """
-    #![profile '%s']
-
-    fs('/etc/ld.so.cache', rg)
-    fs('/usr/lib/libz.so.1', rg)
-    fs('/usr/lib/libdl.so.2', rg)
-    fs('/usr/lib/librt.so.1', rg)
-    fs('/usr/lib/libpthread.so.0', rg)
-    fs('/usr/lib/libgcc_s.so.1', rg)
-    fs('/usr/lib/libc.so.6', rg)
-    fs('/usr/lib/perl5/5.30/core_perl/CORE/dquote_inline.h', r)
-    fs('/usr/lib/libnss_files-2.31.so', rg)
-    fs('/etc/localtime', r)
-    fs('/usr/lib/locale/locale-archive', r)
-    fs('/etc/nsswitch.conf', r)
-    fs('/etc/passwd', r)
-    fs('/var', x)
-    fs('/run/nscd', x)
-    fs('/proc', x)
-    fs('/tmp/bpfbox', rxg)
-    fs('/tmp/bpfbox/a', g)
-    fs('/tmp/bpfbox/b', g)
-    fs('/tmp/bpfbox/c', g)
-    fs('/tmp/bpfbox/d', g)
-    """ % (exa)
-
-    policy_generator.process_policy_text(text)
-
-    out = subprocess.check_output([exa, '/tmp/bpfbox']).decode('utf-8')
-    assert out.strip() == '\n'.join(sorted(os.listdir('/tmp/bpfbox')))
-
 @pytest.mark.skipif(not which('ls'), reason='ls not found on system')
 def test_ls(policy_generator: PolicyGenerator, setup_testdir):
     ls = which('ls')
@@ -249,21 +214,75 @@ def test_ls(policy_generator: PolicyGenerator, setup_testdir):
     text = """
     #![profile '%s']
 
-    fs('/etc/ld.so.cache', rg)
-    fs('/usr/lib/libcap.so.2', rg)
-    fs('/usr/lib/libc.so.6', rg)
-    fs('/usr/lib/locale/locale-archive', rg)
-    fs('/usr/share', x)
-    fs('/proc', x)
-    fs('/tmp/bpfbox', rxg)
-    fs('/tmp/bpfbox/a', g)
-    fs('/tmp/bpfbox/b', g)
-    fs('/tmp/bpfbox/c', g)
-    fs('/tmp/bpfbox/d', g)
-    proc('/usr/bin/ls', g)
-    """ % (ls)
+    fs('%s', read)
+    fs('/etc/ld.so.cache', read|exec|getattr)
+    fs('/lib64/ld-linux-x86-64.so.2', read)
+    fs('/usr/lib/libcap.so.2', read|exec|getattr)
+    fs('/usr/lib/libc.so.6', read|exec|getattr)
+    fs('/usr/lib/locale/locale-archive', read|getattr)
+    fs('/usr/share', exec)
+    fs('/proc', exec)
+    fs('/tmp/bpfbox', read|exec|getattr)
+    fs('/tmp/bpfbox/a', getattr)
+    fs('/tmp/bpfbox/b', getattr)
+    fs('/tmp/bpfbox/c', getattr)
+    fs('/tmp/bpfbox/d', getattr)
+    proc('/usr/bin/ls', getattr)
+    """ % (ls, ls)
 
     policy_generator.process_policy_text(text)
 
     out = subprocess.check_output([ls, '/tmp/bpfbox']).decode('utf-8')
     assert out.strip() == '\n'.join(sorted(os.listdir('/tmp/bpfbox')))
+
+def test_fs_policy_missing_file(policy_generator: PolicyGenerator, setup_testdir):
+
+    text = """
+    #![profile '%s']
+
+    fs('/sdfoihsdfo/asdihsdfoui/asdpisdhf', read|write|exec)
+    proc('/sdfoihsdfo/asdihsdfoui/asdpisdhf', getattr)
+    """ % (OPEN_PATH)
+
+    policy_generator.process_policy_text(text)
+
+def test_net_policy_smoke(policy_generator: PolicyGenerator, setup_testdir):
+    text = """
+    #![profile '%s']
+
+    #[taint] {
+        net(inet,  bind|connect)
+        net(inet6, bind|connect)
+    }
+
+    #[allow] {
+        net(inet,  accept|listen|send|recv)
+        net(inet6, accept|listen|send|recv)
+    }
+
+    #[audit] {
+        net(inet,  create|shutdown)
+        net(inet6, create|shutdown)
+    }
+    """ % (NET_PATH)
+
+    policy_generator.process_policy_text(text)
+
+def test_net_policy(policy_generator: PolicyGenerator, setup_testdir):
+    text = """
+    #![profile '%s']
+
+    #[taint]
+    net(inet,  create)
+
+    #[allow] {
+        net(inet6, create|connect)
+    }
+    """ % (NET_PATH)
+
+    policy_generator.process_policy_text(text)
+
+    subprocess.check_call([NET_PATH, 'inet-create-and-connect'])
+
+    with pytest.raises(subprocess.CalledProcessError):
+        subprocess.check_call([NET_PATH, 'create-unix'])

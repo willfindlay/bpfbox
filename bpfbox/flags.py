@@ -27,7 +27,7 @@
     2020-Jun-29  William Findlay  Created this.
 """
 
-from enum import Enum, unique, _decompose, Flag as _Flag
+from enum import IntEnum as _IntEnum, IntFlag as _IntFlag, unique, auto, _decompose
 from typing import List
 
 from bpfbox.logger import get_logger
@@ -35,24 +35,48 @@ from bpfbox.logger import get_logger
 logger = get_logger()
 
 
-class Flag(_Flag):
-    """
-    enum.Flag but with better printing
-    """
+class IntEnum(_IntEnum):
+    def __str__(self):
+        return "%s" % (self._name_)
 
+    @classmethod
+    def from_string(cls, key: str):
+        try:
+            return getattr(cls, key.upper())
+        except KeyError:
+            logger.warning(f'Invalid key {key.upper()} for {cls.__name__}')
+            return 0
+
+
+class IntFlag(_IntFlag):
     def __str__(self):
         cls = self.__class__
         if self._name_ is not None:
             return '%s' % (self._name_)
-        members, uncovered = _decompose(cls, self._value_)
+        members, _uncovered = _decompose(cls, self._value_)
         if len(members) == 1 and members[0]._name_ is None:
             return '%r' % (members[0]._value_)
         else:
             return '|'.join([str(m._name_ or m._value_) for m in members])
 
+    @classmethod
+    def from_string(cls, key: str):
+        try:
+            return getattr(cls, key.upper())
+        except KeyError:
+            logger.warning(f'Invalid key {key.upper()} for {cls.__name__}')
+            return 0
+
+    @classmethod
+    def from_list(cls, keys: List[str]):
+        res = cls(0)
+        for k in keys:
+            res |= cls.from_string(k)
+        return res
+
 
 @unique
-class BPFBOX_ACTION(Flag):
+class BPFBOX_ACTION(IntFlag):
     NONE     = 0x00000000
     ALLOW    = 0x00000001
     AUDIT    = 0x00000002
@@ -60,24 +84,9 @@ class BPFBOX_ACTION(Flag):
     DENY     = 0x00000008
     COMPLAIN = 0x00000010
 
-    @staticmethod
-    def from_actions(actions: List[str]):
-        action_map = {
-            'taint': BPFBOX_ACTION.TAINT,
-            'allow': BPFBOX_ACTION.ALLOW,
-            'audit': BPFBOX_ACTION.AUDIT,
-        }
-        action = BPFBOX_ACTION.NONE
-        for a in actions:
-            try:
-                action |= action_map[a]
-            except KeyError:
-                pass
-        return action
-
 
 @unique
-class FS_ACCESS(Flag):
+class FS_ACCESS(IntFlag):
     NONE = 0x00000000
     READ = 0x00000001
     WRITE = 0x00000002
@@ -87,31 +96,10 @@ class FS_ACCESS(Flag):
     GETATTR = 0x00000020
     IOCTL = 0x00000040
     RM = 0x00000080
-    ADD_LINK = 0x00000100
-
-    @staticmethod
-    def from_string(s: str):
-        access_map = {
-            'r': FS_ACCESS.READ,
-            'w': FS_ACCESS.WRITE,
-            'a': FS_ACCESS.APPEND,
-            'x': FS_ACCESS.EXEC,
-            'l': FS_ACCESS.ADD_LINK,
-            'i': FS_ACCESS.IOCTL,
-            'g': FS_ACCESS.GETATTR,
-            's': FS_ACCESS.SETATTR,
-            'u': FS_ACCESS.RM
-        }
-        access = FS_ACCESS.NONE
-        for ell in s:
-            try:
-                access |= access_map[ell]
-            except:
-                logger.warning('Unknown access "%s"' % (ell))
-        return access
+    LINK = 0x00000100
 
 @unique
-class IPC_ACCESS(Flag):
+class IPC_ACCESS(IntFlag):
     NONE = 0x00000000
     SIGCHLD = 0x00000001
     SIGKILL = 0x00000002
@@ -120,21 +108,31 @@ class IPC_ACCESS(Flag):
     SIGCHECK = 0x00000010
     PTRACE = 0x00000020
 
-    @staticmethod
-    def from_string(s: str):
-        access_map = {
-            'kill': IPC_ACCESS.SIGKILL,
-            'chld': IPC_ACCESS.SIGCHLD,
-            'stop': IPC_ACCESS.SIGSTOP,
-            'misc': IPC_ACCESS.SIGMISC,
-            'check': IPC_ACCESS.SIGCHECK,
-            'ptrace': IPC_ACCESS.PTRACE,
-        }
-        access = IPC_ACCESS.NONE
-        for ell in s:
-            try:
-                access |= access_map[ell]
-            except:
-                logger.warning('Unknown access "%s"' % (ell))
-        return access
+@unique
+class NET_FAMILY(IntEnum):
+    NONE      = 0
+    UNIX      = auto()
+    INET      = auto()
+    INET6     = auto()
+    IPX       = auto()
+    NETLINK   = auto()
+    X25       = auto()
+    AX25      = auto()
+    ATMPVC    = auto()
+    APPLETALK = auto()
+    PACKET    = auto()
+    # TODO: add more here
+    UNKNOWN   = auto()
+
+@unique
+class NET_ACCESS(IntFlag):
+    NONE    = 0x00000000
+    CONNECT = 0x00000001
+    BIND    = 0x00000002
+    ACCEPT  = 0x00000004
+    LISTEN  = 0x00000008
+    SEND    = 0x00000010
+    RECV    = 0x00000020
+    CREATE  = 0x00000040
+    SHUTDOWN = 0x00000080
 

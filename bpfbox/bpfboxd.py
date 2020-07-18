@@ -86,6 +86,7 @@ class BPFBoxd(DaemonMixin):
 
     def _load_policy(self):
         self.bpf_program.load_bpf(maps_pinned=False)
+        self.bpf_program.generate_policy()
 
 
 def main(args=sys.argv[1:]) -> None:

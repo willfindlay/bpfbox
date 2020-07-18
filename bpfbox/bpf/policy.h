@@ -20,16 +20,35 @@
  *  2020-Jul-01  William Findlay  Created this.
  */
 
+#ifndef POLICY_H
+#define POLICY_H
+
+#include <linux/binfmts.h>
+#include <linux/fs.h>
+#include <linux/net.h>
+#include <linux/sched.h>
+#include <linux/socket.h>
+#include <linux/version.h>
+#include <net/sock.h>
+#include <uapi/asm-generic/mman-common.h>
+#include <uapi/asm/signal.h>
+#include <uapi/linux/mman.h>
+
 /* =========================================================================
  * Profiles and Processes
  * ========================================================================= */
+
+enum bpfbox_process_state_t : u64 {
+    STATE_NONE    = 0x00000000,
+    STATE_TAINTED = 0x00000001,
+};
 
 /* bpfbox-related information associated with a process (task) */
 struct bpfbox_process_t {
     u64 profile_key;
     u32 pid;
     u32 tgid;
-    u8 tainted;
+    u64 state;
 };
 
 /* bpfbox-related information associated with a profile */
@@ -46,12 +65,12 @@ struct bpfbox_profile_t {
 #define bpfbox_accesss_t u32
 
 /* each action represents a BPFBox policy decision. */
-enum bpfbox_action_t {
-    ACTION_NONE = 0x00000000,
-    ACTION_ALLOW = 0x00000001,
-    ACTION_AUDIT = 0x00000002,
-    ACTION_TAINT = 0x00000004,
-    ACTION_DENY = 0x00000008,
+enum bpfbox_action_t : u32 {
+    ACTION_NONE     = 0x00000000,
+    ACTION_ALLOW    = 0x00000001,
+    ACTION_AUDIT    = 0x00000002,
+    ACTION_TAINT    = 0x00000004,
+    ACTION_DENY     = 0x00000008,
     ACTION_COMPLAIN = 0x00000010,
 };
 
@@ -66,17 +85,17 @@ struct bpfbox_policy_t {
  * File System Policy
  * ========================================================================= */
 
-enum bpfbox_fs_access_t {
-    FS_NONE = 0x00000000,
-    FS_READ = 0x00000001,
-    FS_WRITE = 0x00000002,
-    FS_APPEND = 0x00000004,
-    FS_EXEC = 0x00000008,
-    FS_SETATTR = 0x00000010,
-    FS_GETATTR = 0x00000020,
-    FS_IOCTL = 0x00000040,
-    FS_RM = 0x00000080,
-    FS_ADD_LINK = 0x00000100,
+enum bpfbox_fs_access_t : u32 {
+    FS_NONE     = 0x00000000,
+    FS_READ     = 0x00000001,
+    FS_WRITE    = 0x00000002,
+    FS_APPEND   = 0x00000004,
+    FS_EXEC     = 0x00000008,
+    FS_SETATTR  = 0x00000010,
+    FS_GETATTR  = 0x00000020,
+    FS_IOCTL    = 0x00000040,
+    FS_RM       = 0x00000080,
+    FS_LINK = 0x00000100,
 };
 
 /* uniquely computes an (inode, profile) pair. */
@@ -96,14 +115,14 @@ struct bpfbox_procfs_policy_key_t {
  * IPC Policy
  * ========================================================================= */
 
-enum bpfbox_ipc_access_t {
-    IPC_NONE = 0x00000000,
-    IPC_SIGCHLD = 0x00000001,
-    IPC_SIGKILL = 0x00000002,
-    IPC_SIGSTOP = 0x00000004,
-    IPC_SIGMISC = 0x00000008,
+enum bpfbox_ipc_access_t : u32 {
+    IPC_NONE     = 0x00000000,
+    IPC_SIGCHLD  = 0x00000001,
+    IPC_SIGKILL  = 0x00000002,
+    IPC_SIGSTOP  = 0x00000004,
+    IPC_SIGMISC  = 0x00000008,
     IPC_SIGCHECK = 0x00000010,
-    IPC_PTRACE = 0x00000020,
+    IPC_PTRACE   = 0x00000020,
 };
 #define IPC_SIGANY \
     (IPC_SIGCHLD | IPC_SIGKILL | IPC_SIGSTOP | IPC_SIGMISC | IPC_SIGCHECK)
@@ -111,6 +130,43 @@ enum bpfbox_ipc_access_t {
 struct bpfbox_ipc_policy_key_t {
     u64 subject_key;
     u64 object_key;
+};
+
+/* =========================================================================
+ * Network Policy
+ * ========================================================================= */
+
+enum bpfbox_network_family_t : u32 {
+    NET_FAMILY_NONE = 0,
+    NET_FAMILY_UNIX,
+    NET_FAMILY_INET,
+    NET_FAMILY_INET6,
+    NET_FAMILY_IPX,
+    NET_FAMILY_NETLINK,
+    NET_FAMILY_X25,
+    NET_FAMILY_AX25,
+    NET_FAMILY_ATMPVC,
+    NET_FAMILY_APPLETALK,
+    NET_FAMILY_PACKET,
+    // TODO: add more here
+    NET_FAMILY_UNKNOWN,
+};
+
+enum bpfbox_network_access_t : u32 {
+    NET_NONE     = 0x00000000,
+    NET_CONNECT  = 0x00000001,
+    NET_BIND     = 0x00000002,
+    NET_ACCEPT   = 0x00000004,
+    NET_LISTEN   = 0x00000008,
+    NET_SEND     = 0x00000010,
+    NET_RECV     = 0x00000020,
+    NET_CREATE   = 0x00000040,
+    NET_SHUTDOWN = 0x00000080,
+};
+
+struct bpfbox_network_policy_key_t {
+    u64 profile_key;
+    enum bpfbox_network_family_t family;
 };
 
 /* =========================================================================
@@ -129,16 +185,16 @@ struct bpfbox_ipc_policy_key_t {
         return;                                                       \
     }
 
-#define DO_AUDIT_COMMON(event, process, action)    \
-    do {                                           \
-        if (!event) {                              \
-            return;                                \
-        }                                          \
-        event->uid = bpf_get_current_uid_gid();    \
-        event->pid = process->pid;                 \
-        event->profile_key = process->profile_key; \
-        event->action = action;                    \
-        event->access = access;                    \
+#define DO_AUDIT_COMMON(event, process, action)         \
+    do {                                                \
+        if (!event) {                                   \
+            return;                                     \
+        }                                               \
+        event->uid         = bpf_get_current_uid_gid(); \
+        event->pid         = process->pid;              \
+        event->profile_key = process->profile_key;      \
+        event->action      = action;                    \
+        event->access      = access;                    \
     } while (0)
 
 /* for auditing inode events */
@@ -155,3 +211,11 @@ struct bpfbox_ipc_audit_event_t {
     u32 object_pid;
     u64 object_profile_key;
 };
+
+/* for auditing network events */
+struct bpfbox_network_audit_event_t {
+    STRUCT_AUDIT_COMMON
+    enum bpfbox_network_family_t family;
+};
+
+#endif /* ifndef POLICY_H */

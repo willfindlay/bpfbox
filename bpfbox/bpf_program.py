@@ -30,7 +30,7 @@ from bcc import BPF
 
 from bpfbox import defs
 from bpfbox.logger import get_logger
-from bpfbox.flags import BPFBOX_ACTION, FS_ACCESS, IPC_ACCESS
+from bpfbox.flags import BPFBOX_ACTION, FS_ACCESS, IPC_ACCESS, NET_ACCESS, NET_FAMILY
 from bpfbox.utils import calculate_profile_key, get_inode_and_device, which, profile_key_to_exe
 from bpfbox.libbpfbox import register_uprobes
 
@@ -121,7 +121,6 @@ class BPFProgram:
         self.bpf = BPF(text=source.encode('utf-8'), cflags=cflags)
         self._register_ring_buffers()
         self._register_uprobes()
-        self._generate_policy()
 
         # Pin maps
         # if not maps_pinned:
@@ -187,6 +186,18 @@ class BPFProgram:
                 )
             )
 
+        @ringbuf_callback(self.bpf, 'network_audit_events')
+        def network_audit_events(ctx, event, size):
+            logger.audit(
+                'action=%s access=NET_%s family=%s exe=%s'
+                % (
+                    BPFBOX_ACTION(event.action),
+                    NET_ACCESS(event.access),
+                    NET_FAMILY(event.family),
+                    self._format_exe(event.profile_key, event.pid, event.uid),
+                )
+            )
+
         # Debugging below this line
         if not self.debug:
             return
@@ -208,7 +219,7 @@ class BPFProgram:
         register_uprobes(self.bpf)
         self.have_registered_uprobes = True
 
-    def _generate_policy(self):
+    def generate_policy(self):
         logger.info('Generating policy...')
         policy_files = []
         for (dirpath, dirnames, filenames) in os.walk(defs.policy_directory):

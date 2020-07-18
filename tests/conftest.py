@@ -33,6 +33,7 @@ def bpf_program(caplog):
     b.bpf['fs_policy'].clear()
     b.bpf['procfs_policy'].clear()
     b.bpf['ipc_policy'].clear()
+    b.bpf['net_policy'].clear()
     # IMPORTANT NOTE: remember to put new maps here
 
     profile_key_to_exe.clear()

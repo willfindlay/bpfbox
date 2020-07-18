@@ -26,7 +26,7 @@ from pyparsing import *
 
 from bpfbox.bpf_program import BPFProgram
 from bpfbox.logger import get_logger
-from bpfbox.flags import BPFBOX_ACTION, FS_ACCESS, IPC_ACCESS
+from bpfbox.flags import BPFBOX_ACTION, FS_ACCESS, IPC_ACCESS, NET_ACCESS, NET_FAMILY
 from bpfbox.libbpfbox import Commands
 
 logger = get_logger()
@@ -39,8 +39,17 @@ rparen = Literal(')').suppress()
 
 pathname = quoted_string
 
-fs_access = Word('rwaxligsu')
-signal_access = Group(Keyword('kill') | Keyword('chld') | Keyword('stop') | Keyword('misc') | Keyword('check'))
+def flags(expr):
+    """
+    A list of expr delimited by |.
+    """
+    return delimitedList(expr, delim='|')
+
+fs_access = flags(MatchFirst([Keyword(access.name.lower()) for access in FS_ACCESS if access not in [FS_ACCESS.NONE]]))
+signal_access = flags(MatchFirst([Keyword(access.name.lower()) for access in IPC_ACCESS if access not in [IPC_ACCESS.NONE, IPC_ACCESS.PTRACE]]))
+net_access = flags(MatchFirst([Keyword(access.name.lower()) for access in NET_ACCESS if access != NET_ACCESS.NONE]))
+
+net_family = MatchFirst([Keyword(family.name.lower()) for family in NET_FAMILY if family not in [NET_FAMILY.NONE, NET_FAMILY.UNKNOWN]])
 
 
 class RuleBase:
@@ -51,6 +60,9 @@ class RuleBase:
         if 'taint' not in self.rule_actions:
             self.rule_actions.append('allow')
 
+    def __repr__(self):
+        return self.__class__.__name__
+
     def __call__(self, exe):
         raise NotImplementedError('Rules must implement __call__')
 
@@ -60,8 +72,8 @@ class FSRule(RuleBase):
 
     def __call__(self, exe):
         pathname = self.rule_dict['pathname']
-        access = FS_ACCESS.from_string(self.rule_dict['access'])
-        action = BPFBOX_ACTION.from_actions(self.rule_actions)
+        access = FS_ACCESS.from_list(self.rule_dict['access'])
+        action = BPFBOX_ACTION.from_list(self.rule_actions)
         Commands.add_fs_rule(exe, pathname, access, action)
 
 class ProcFSRule(RuleBase):
@@ -70,8 +82,8 @@ class ProcFSRule(RuleBase):
 
     def __call__(self, exe):
         pathname = self.rule_dict['pathname']
-        access = FS_ACCESS.from_string(self.rule_dict['access'])
-        action = BPFBOX_ACTION.from_actions(self.rule_actions)
+        access = FS_ACCESS.from_list(self.rule_dict['access'])
+        action = BPFBOX_ACTION.from_list(self.rule_actions)
         Commands.add_procfs_rule(exe, pathname, access, action)
 
 class SignalRule(RuleBase):
@@ -80,8 +92,8 @@ class SignalRule(RuleBase):
 
     def __call__(self, exe):
         pathname = self.rule_dict['pathname']
-        access = IPC_ACCESS.from_string(self.rule_dict['access'])
-        action = BPFBOX_ACTION.from_actions(self.rule_actions)
+        access = IPC_ACCESS.from_list(self.rule_dict['access'])
+        action = BPFBOX_ACTION.from_list(self.rule_actions)
         Commands.add_ipc_rule(exe, pathname, access, action)
 
 class PtraceRule(RuleBase):
@@ -91,8 +103,18 @@ class PtraceRule(RuleBase):
     def __call__(self, exe):
         pathname = self.rule_dict['pathname']
         access = IPC_ACCESS.PTRACE
-        action = BPFBOX_ACTION.from_actions(self.rule_actions)
+        action = BPFBOX_ACTION.from_list(self.rule_actions)
         Commands.add_ipc_rule(exe, pathname, access, action)
+
+class NetRule(RuleBase):
+    def __init__(self, rule_dict: Dict):
+        super().__init__(rule_dict)
+
+    def __call__(self, exe):
+        access = NET_ACCESS.from_list(self.rule_dict['access'])
+        family = NET_FAMILY.from_string(self.rule_dict['family'])
+        action = BPFBOX_ACTION.from_list(self.rule_actions)
+        Commands.add_net_rule(exe, access, family, action)
 
 
 class PolicyGenerator:
@@ -113,7 +135,10 @@ class PolicyGenerator:
         self._parse_policy_text(policy_text)
 
         for rule in self.rules:
-            rule(self.exe)
+            try:
+                rule(self.exe)
+            except Exception as e:
+                logger.warning(f'Failed to apply rule {rule} for {self.exe}: {e}', exc_info=e)
 
     def _parse_policy_text(self, policy_text: str) -> Dict:
         try:
@@ -124,6 +149,8 @@ class PolicyGenerator:
             logger.error("    " + " " * (pe.column - 1) + "^")
             logger.error("    %s" % (pe))
             raise pe
+        except Exception as e:
+            logger.error(f'Fatal error while parsing policy text: {e}')
 
     def _add_rule(self, rule_dict):
         if rule_dict['type'] == 'fs':
@@ -134,6 +161,8 @@ class PolicyGenerator:
             rule = SignalRule(rule_dict)
         elif rule_dict['type'] == 'ptrace':
             rule = PtraceRule(rule_dict)
+        elif rule_dict['type'] == 'net':
+            rule = NetRule(rule_dict)
         else:
             raise Exception('Unknown rule type %s' % (rule_dict['type']))
         self.rules.append(rule)
@@ -215,13 +244,18 @@ class PolicyGenerator:
         pathname_or_self = pathname | Keyword('self').setParseAction(self._self_exe)
         return rule_type + lparen + pathname_or_self('pathname') + rparen
 
+    def _net_rule(self) -> ParserElement:
+        rule_type = Literal('net')('type')
+        return rule_type + lparen + net_family('family') + comma + net_access('access') + rparen
+
     def _rule(self) -> ParserElement:
         fs_rule = self._fs_rule()
         procfs_rule = self._procfs_rule()
         signal_rule = self._signal_rule()
         ptrace_rule = self._ptrace_rule()
+        net_rule = self._net_rule()
         # TODO add more rule types here
-        return Group(Group(ZeroOrMore(self._macro()))('macros') + (fs_rule | procfs_rule | signal_rule | ptrace_rule))
+        return Group(Group(ZeroOrMore(self._macro()))('macros') + (fs_rule | procfs_rule | signal_rule | ptrace_rule | net_rule))
 
     def _block(self) -> ParserElement:
         begin = Literal('{').suppress()
