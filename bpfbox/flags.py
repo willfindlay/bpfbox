@@ -27,7 +27,7 @@
     2020-Jun-29  William Findlay  Created this.
 """
 
-from enum import Enum, unique, _decompose, Flag as _Flag
+from enum import IntEnum as _IntEnum, IntFlag as _IntFlag, unique, auto, _decompose
 from typing import List
 
 from bpfbox.logger import get_logger
@@ -35,16 +35,17 @@ from bpfbox.logger import get_logger
 logger = get_logger()
 
 
-class Flag(_Flag):
-    """
-    enum.Flag but with better printing
-    """
+class IntEnum(_IntEnum):
+    def __str__(self):
+        return "%s" % (self._name_)
 
+
+class IntFlag(_IntFlag):
     def __str__(self):
         cls = self.__class__
         if self._name_ is not None:
             return '%s' % (self._name_)
-        members, uncovered = _decompose(cls, self._value_)
+        members, _uncovered = _decompose(cls, self._value_)
         if len(members) == 1 and members[0]._name_ is None:
             return '%r' % (members[0]._value_)
         else:
@@ -52,7 +53,7 @@ class Flag(_Flag):
 
 
 @unique
-class BPFBOX_ACTION(Flag):
+class BPFBOX_ACTION(IntFlag):
     NONE     = 0x00000000
     ALLOW    = 0x00000001
     AUDIT    = 0x00000002
@@ -63,10 +64,8 @@ class BPFBOX_ACTION(Flag):
     @staticmethod
     def from_actions(actions: List[str]):
         action_map = {
-            'taint': BPFBOX_ACTION.TAINT,
-            'allow': BPFBOX_ACTION.ALLOW,
-            'audit': BPFBOX_ACTION.AUDIT,
-        }
+                action.name.lower(): action for action in BPFBOX_ACTION if action != BPFBOX_ACTION.NONE
+                }
         action = BPFBOX_ACTION.NONE
         for a in actions:
             try:
@@ -77,7 +76,7 @@ class BPFBOX_ACTION(Flag):
 
 
 @unique
-class FS_ACCESS(Flag):
+class FS_ACCESS(IntFlag):
     NONE = 0x00000000
     READ = 0x00000001
     WRITE = 0x00000002
@@ -111,7 +110,7 @@ class FS_ACCESS(Flag):
         return access
 
 @unique
-class IPC_ACCESS(Flag):
+class IPC_ACCESS(IntFlag):
     NONE = 0x00000000
     SIGCHLD = 0x00000001
     SIGKILL = 0x00000002
@@ -123,18 +122,61 @@ class IPC_ACCESS(Flag):
     @staticmethod
     def from_string(s: str):
         access_map = {
-            'kill': IPC_ACCESS.SIGKILL,
-            'chld': IPC_ACCESS.SIGCHLD,
-            'stop': IPC_ACCESS.SIGSTOP,
-            'misc': IPC_ACCESS.SIGMISC,
-            'check': IPC_ACCESS.SIGCHECK,
-            'ptrace': IPC_ACCESS.PTRACE,
-        }
-        access = IPC_ACCESS.NONE
-        for ell in s:
-            try:
-                access |= access_map[ell]
-            except:
-                logger.warning('Unknown access "%s"' % (ell))
-        return access
+                access.name.lower(): access for access in IPC_ACCESS if access != IPC_ACCESS.NONE
+                }
+        try:
+            return access_map[s]
+        except KeyError:
+            logger.warning('Unknown access "%s"' % (s))
+            return IPC_ACCESS.NONE
+
+@unique
+class NET_FAMILY(IntEnum):
+    NONE      = 0
+    UNIX      = auto()
+    INET      = auto()
+    INET6     = auto()
+    IPX       = auto()
+    NETLINK   = auto()
+    X25       = auto()
+    AX25      = auto()
+    ATMPVC    = auto()
+    APPLETALK = auto()
+    PACKET    = auto()
+    # TODO: add more here
+    UNKNOWN   = auto()
+
+    @staticmethod
+    def from_string(s: str):
+        family_map = {
+                family.name.lower(): family for family in NET_FAMILY if family != NET_FAMILY.NONE
+                }
+        try:
+            return family_map[s]
+        except KeyError:
+            logger.warning('Unknown family "%s"' % (s))
+            return NET_FAMILY.NONE
+
+@unique
+class NET_ACCESS(IntFlag):
+    NONE    = 0x00000000
+    CONNECT = 0x00000001
+    BIND    = 0x00000002
+    ACCEPT  = 0x00000004
+    LISTEN  = 0x00000008
+    SEND    = 0x00000010
+    RECV    = 0x00000020
+    CREATE  = 0x00000040
+    SHUTDOWN = 0x00000080
+
+    @staticmethod
+    def from_string(s: str):
+        access_map = {
+                access.name.lower(): access for access in NET_ACCESS if access != NET_ACCESS.NONE
+                }
+        try:
+            return access_map[s]
+        except KeyError:
+            logger.warning('Unknown access "%s"' % (s))
+            return NET_ACCESS.NONE
 

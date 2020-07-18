@@ -36,6 +36,7 @@ from bpfbox import defs
 DRIVER_PATH = os.path.join(defs.project_path, 'tests/driver')
 OPEN_PATH = os.path.join(DRIVER_PATH, 'open')
 IPC_PATH = os.path.join(DRIVER_PATH, 'ipc')
+NET_PATH = os.path.join(DRIVER_PATH, 'net')
 
 @pytest.fixture
 def setup_testdir():
@@ -148,9 +149,9 @@ def test_ipc_policy(policy_generator: PolicyGenerator, setup_testdir):
     #![profile '%s']
 
     #[taint]
-    signal(self, check)
+    signal(self, sigcheck)
 
-    signal('%s', kill)
+    signal('%s', sigkill)
     """ % (IPC_PATH, sleep_path)
 
     policy_generator.process_policy_text(text)
@@ -206,42 +207,6 @@ def test_open_proc_other_not_allowed(policy_generator: PolicyGenerator, setup_te
     with pytest.raises(subprocess.CalledProcessError):
         subprocess.check_call([OPEN_PATH, 'proc-other', str(sleep_pid)])
 
-
-@pytest.mark.skipif(not which('exa'), reason='exa not found on system')
-def test_exa_profile(policy_generator: PolicyGenerator, setup_testdir):
-    exa = which('exa')
-
-    text = """
-    #![profile '%s']
-
-    fs('/etc/ld.so.cache', rg)
-    fs('/usr/lib/libz.so.1', rg)
-    fs('/usr/lib/libdl.so.2', rg)
-    fs('/usr/lib/librt.so.1', rg)
-    fs('/usr/lib/libpthread.so.0', rg)
-    fs('/usr/lib/libgcc_s.so.1', rg)
-    fs('/usr/lib/libc.so.6', rg)
-    fs('/usr/lib/perl5/5.30/core_perl/CORE/dquote_inline.h', r)
-    fs('/usr/lib/libnss_files-2.31.so', rg)
-    fs('/etc/localtime', r)
-    fs('/usr/lib/locale/locale-archive', r)
-    fs('/etc/nsswitch.conf', r)
-    fs('/etc/passwd', r)
-    fs('/var', x)
-    fs('/run/nscd', x)
-    fs('/proc', x)
-    fs('/tmp/bpfbox', rxg)
-    fs('/tmp/bpfbox/a', g)
-    fs('/tmp/bpfbox/b', g)
-    fs('/tmp/bpfbox/c', g)
-    fs('/tmp/bpfbox/d', g)
-    """ % (exa)
-
-    policy_generator.process_policy_text(text)
-
-    out = subprocess.check_output([exa, '/tmp/bpfbox']).decode('utf-8')
-    assert out.strip() == '\n'.join(sorted(os.listdir('/tmp/bpfbox')))
-
 @pytest.mark.skipif(not which('ls'), reason='ls not found on system')
 def test_ls(policy_generator: PolicyGenerator, setup_testdir):
     ls = which('ls')
@@ -267,3 +232,66 @@ def test_ls(policy_generator: PolicyGenerator, setup_testdir):
 
     out = subprocess.check_output([ls, '/tmp/bpfbox']).decode('utf-8')
     assert out.strip() == '\n'.join(sorted(os.listdir('/tmp/bpfbox')))
+
+def test_fs_policy_missing_file(policy_generator: PolicyGenerator, setup_testdir):
+
+    text = """
+    #![profile '%s']
+
+    fs('/sdfoihsdfo/asdihsdfoui/asdpisdhf', rwx)
+    proc('/sdfoihsdfo/asdihsdfoui/asdpisdhf', g)
+    """ % (OPEN_PATH)
+
+    policy_generator.process_policy_text(text)
+
+def test_net_policy_smoke(policy_generator: PolicyGenerator, setup_testdir):
+    text = """
+    #![profile '%s']
+
+    #[taint] {
+        net(inet,  bind)
+        net(inet6, bind)
+        net(inet,  connect)
+        net(inet6, connect)
+    }
+
+    #[allow] {
+        net(inet,  accept)
+        net(inet6, accept)
+        net(inet,  listen)
+        net(inet6, listen)
+        net(inet,  send)
+        net(inet6, send)
+        net(inet,  recv)
+        net(inet6, recv)
+    }
+
+    #[audit] {
+        net(inet,  create)
+        net(inet6, create)
+        net(inet,  shutdown)
+        net(inet6, shutdown)
+    }
+    """ % (NET_PATH)
+
+    policy_generator.process_policy_text(text)
+
+def test_net_policy(policy_generator: PolicyGenerator, setup_testdir):
+    text = """
+    #![profile '%s']
+
+    #[taint]
+    net(inet,  create)
+
+    #[allow] {
+        net(inet6, create)
+        net(inet6, connect)
+    }
+    """ % (NET_PATH)
+
+    policy_generator.process_policy_text(text)
+
+    subprocess.check_call([NET_PATH, 'inet-create-and-connect'])
+
+    with pytest.raises(subprocess.CalledProcessError):
+        subprocess.check_call([NET_PATH, 'create-unix'])

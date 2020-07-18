@@ -29,16 +29,19 @@
  *  2020-Jun-29  William Findlay  Created this.
  */
 
-void add_profile(unsigned long long profile_key, unsigned char taint_on_exec){};
+#include <sys/types.h>
 
-void add_fs_rule(unsigned long long profile_key, unsigned long st_ino,
-                 unsigned long st_dev, unsigned long access_mask,
-                 unsigned int action){};
+void add_profile(u_int64_t profile_key, u_int8_t taint_on_exec){};
 
-void add_procfs_rule(unsigned long long subject_profile_key,
-                     unsigned long long object_profile_key,
-                     unsigned long access, unsigned int action){};
+void add_fs_rule(u_int64_t profile_key, u_int32_t st_ino, u_int32_t st_dev,
+                 u_int32_t access_mask, u_int32_t action){};
 
-void add_ipc_rule(unsigned long long subject_profile_key,
-                  unsigned long long object_profile_key, unsigned long access,
-                  unsigned int action){};
+void add_procfs_rule(u_int64_t subject_profile_key,
+                     u_int64_t object_profile_key, u_int32_t access,
+                     u_int32_t action){};
+
+void add_ipc_rule(u_int64_t subject_profile_key, u_int64_t object_profile_key,
+                  u_int32_t access, u_int32_t action){};
+
+void add_net_rule(u_int64_t profile_key, u_int32_t access, u_int32_t family,
+                  u_int32_t action){};

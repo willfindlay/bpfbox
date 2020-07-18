@@ -4,10 +4,11 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <sys/ptrace.h>
+#include <sys/socket.h>
 #include <sys/stat.h>
 #include <sys/types.h>
 #include <sys/wait.h>
-#include <sys/ptrace.h>
 #include <unistd.h>
 
 int open_or_die(const char *path, int flags)
@@ -142,12 +143,57 @@ int kill_or_die(pid_t pid, int sig)
     return rc;
 }
 
-long ptrace_or_die(enum __ptrace_request request, pid_t pid, void *addr, void *data)
+long ptrace_or_die(enum __ptrace_request request, pid_t pid, void *addr,
+                   void *data)
 {
     long rc = ptrace(request, pid, addr, data);
 
     if (rc < 0) {
-        fprintf(stderr, "ptrace(%d, %d, %x, %x) failed with %d\n", request, pid, addr, data);
+        fprintf(stderr, "ptrace(%d, %d, %p, %p) failed with %ld\n", request,
+                pid, addr, data, rc);
+        if (errno == EPERM)
+            exit(1);
+    }
+
+    return rc;
+}
+
+int socket_or_die(int domain, int type, int protocol)
+{
+    int rc = socket(domain, type, protocol);
+
+    if (rc < 0) {
+        fprintf(stderr, "socket(%d, %d, %d) failed with %d\n", domain, type,
+                protocol, rc);
+        if (errno == EPERM)
+            exit(1);
+    }
+
+    return rc;
+}
+
+int connect_or_die(int socket, const struct sockaddr *address,
+                   socklen_t address_len)
+{
+    int rc = connect(socket, address, address_len);
+
+    if (rc < 0) {
+        fprintf(stderr, "connect(%d, %p, %d) failed with %d\n", socket, address,
+                address_len, rc);
+        if (errno == EPERM)
+            exit(1);
+    }
+
+    return rc;
+}
+
+int socketpair_or_die(int domain, int type, int protocol, int socket_vector[2])
+{
+    int rc = socketpair(domain, type, protocol, socket_vector);
+
+    if (rc < 0) {
+        fprintf(stderr, "socketpair(%d, %d, %d, %p) failed with %d\n", domain,
+                type, protocol, socket_vector, rc);
         if (errno == EPERM)
             exit(1);
     }
