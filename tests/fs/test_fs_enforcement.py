@@ -442,35 +442,6 @@ def test_non_malicious_symlink_can_read_original(bpf_program: BPFProgram, caplog
     subprocess.check_call([OPEN_PATH, 'malicious-symlink-read'])
 
 
-@pytest.mark.skipif(not which('exa'), reason='exa not found on system')
-def test_exa(bpf_program: BPFProgram, caplog, setup_testdir):
-    exa = which('exa')
-    Commands.add_profile(exa, True)
-    Commands.add_fs_rule(exa, "/etc/ld.so.cache", FS_ACCESS.READ | FS_ACCESS.GETATTR)
-    Commands.add_fs_rule(exa, "/usr/lib/libz.so.1", FS_ACCESS.READ | FS_ACCESS.GETATTR)
-    Commands.add_fs_rule(exa, "/usr/lib/libdl.so.2", FS_ACCESS.READ | FS_ACCESS.GETATTR)
-    Commands.add_fs_rule(exa, "/usr/lib/librt.so.1", FS_ACCESS.READ | FS_ACCESS.GETATTR)
-    Commands.add_fs_rule(exa, "/usr/lib/libpthread.so.0", FS_ACCESS.READ | FS_ACCESS.GETATTR)
-    Commands.add_fs_rule(exa, "/usr/lib/libgcc_s.so.1", FS_ACCESS.READ | FS_ACCESS.GETATTR)
-    Commands.add_fs_rule(exa, "/usr/lib/libc.so.6", FS_ACCESS.READ | FS_ACCESS.GETATTR)
-    Commands.add_fs_rule(exa, "/usr/lib/perl5/5.30/core_perl/CORE/dquote_inline.h", FS_ACCESS.EXEC | FS_ACCESS.GETATTR)
-    Commands.add_fs_rule(exa, "/usr/lib/libnss_files-2.31.so", FS_ACCESS.EXEC | FS_ACCESS.READ | FS_ACCESS.GETATTR)
-    Commands.add_fs_rule(exa, "/etc/localtime", FS_ACCESS.READ | FS_ACCESS.EXEC | FS_ACCESS.GETATTR)
-    Commands.add_fs_rule(exa, "/usr/lib/locale/locale-archive", FS_ACCESS.READ | FS_ACCESS.GETATTR)
-    Commands.add_fs_rule(exa, "/etc/nsswitch.conf", FS_ACCESS.READ | FS_ACCESS.GETATTR)
-    Commands.add_fs_rule(exa, "/etc/passwd", FS_ACCESS.READ | FS_ACCESS.GETATTR)
-    Commands.add_fs_rule(exa, "/var", FS_ACCESS.EXEC | FS_ACCESS.GETATTR)
-    Commands.add_fs_rule(exa, "/run/nscd", FS_ACCESS.EXEC | FS_ACCESS.GETATTR)
-    Commands.add_fs_rule(exa, '/proc', FS_ACCESS.EXEC | FS_ACCESS.GETATTR)
-    Commands.add_fs_rule(exa, '/tmp/bpfbox', FS_ACCESS.READ | FS_ACCESS.EXEC | FS_ACCESS.GETATTR)
-    Commands.add_fs_rule(exa, '/tmp/bpfbox/a', FS_ACCESS.GETATTR)
-    Commands.add_fs_rule(exa, '/tmp/bpfbox/b', FS_ACCESS.GETATTR)
-    Commands.add_fs_rule(exa, '/tmp/bpfbox/c', FS_ACCESS.GETATTR)
-    Commands.add_fs_rule(exa, '/tmp/bpfbox/d', FS_ACCESS.GETATTR)
-
-    out = subprocess.check_output([exa, '/tmp/bpfbox']).decode('utf-8')
-    assert out.strip() == '\n'.join(sorted(os.listdir('/tmp/bpfbox')))
-
 @pytest.mark.skipif(not which('ls'), reason='ls not found on system')
 def test_ls(bpf_program: BPFProgram, caplog, setup_testdir):
     ls = which('ls')

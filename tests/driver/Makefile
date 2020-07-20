@@ -2,7 +2,7 @@ CC     = gcc
 LDLAGS =
 CFLAGS = -O0
 
-EXES   = open ipc
+EXES   = open ipc net
 
 .PHONY: all
 all: $(EXES)
@@ -16,3 +16,6 @@ open: open.c or_die.h
 
 ipc: ipc.c or_die.h
 	$(CC) $(CFLAGS) $(LDFLAGS) -o ipc ipc.c
+
+net: net.c or_die.h
+	$(CC) $(CFLAGS) $(LDFLAGS) -o net net.c

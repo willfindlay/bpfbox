@@ -32,7 +32,7 @@
 import os
 import sys
 import ctypes as ct
-from bpfbox.flags import BPFBOX_ACTION, FS_ACCESS, IPC_ACCESS
+from bpfbox.flags import BPFBOX_ACTION, FS_ACCESS, IPC_ACCESS, NET_FAMILY, NET_ACCESS
 from bpfbox.utils import calculate_profile_key, get_inode_and_device
 
 from bpfbox import defs
@@ -55,10 +55,11 @@ def _add_command(command, argtypes, restype=None):
     commands.append((command, argtypes, restype))
 
 
-_add_command('add_profile', [ct.c_ulonglong, ct.c_uint8])
-_add_command('add_fs_rule', [ct.c_ulonglong, ct.c_ulong, ct.c_ulong, ct.c_ulong, ct.c_uint])
-_add_command('add_procfs_rule', [ct.c_ulonglong, ct.c_ulonglong, ct.c_ulong, ct.c_uint])
-_add_command('add_ipc_rule', [ct.c_ulonglong, ct.c_ulonglong, ct.c_ulong, ct.c_uint])
+_add_command('add_profile', [ct.c_uint64, ct.c_uint8])
+_add_command('add_fs_rule', [ct.c_uint64, ct.c_uint32, ct.c_uint32, ct.c_uint32, ct.c_uint32])
+_add_command('add_procfs_rule', [ct.c_uint64, ct.c_uint64, ct.c_uint32, ct.c_uint32])
+_add_command('add_ipc_rule', [ct.c_uint64, ct.c_uint64, ct.c_uint32, ct.c_uint32])
+_add_command('add_net_rule', [ct.c_uint64, ct.c_uint32, ct.c_uint32, ct.c_uint32])
 
 
 have_registered_uprobes = False
@@ -97,7 +98,7 @@ class Commands:
         profile_key = calculate_profile_key(exe)
         st_ino, st_dev = get_inode_and_device(path)
 
-        lib.add_fs_rule(profile_key, st_ino, st_dev, access.value, action.value)
+        lib.add_fs_rule(profile_key, st_ino, st_dev, access, action)
 
         if not (action & BPFBOX_ACTION.ALLOW):
             return
@@ -118,10 +119,11 @@ class Commands:
                 continue
             access = FS_ACCESS.EXEC
             action = BPFBOX_ACTION.ALLOW
-            lib.add_fs_rule(profile_key, st_ino, st_dev, access.value, action.value)
+            lib.add_fs_rule(profile_key, st_ino, st_dev, access, action)
             if not tail:
                 break
 
+    @staticmethod
     def add_procfs_rule(
         subject_exe: str,
         object_exe: str,
@@ -134,9 +136,10 @@ class Commands:
         object_profile_key = calculate_profile_key(object_exe)
 
         lib.add_procfs_rule(
-            subject_profile_key, object_profile_key, access.value, action.value
+            subject_profile_key, object_profile_key, access, action
         )
 
+    @staticmethod
     def add_ipc_rule(
         subject_exe: str,
         object_exe: str,
@@ -149,5 +152,20 @@ class Commands:
         object_profile_key = calculate_profile_key(object_exe)
 
         lib.add_ipc_rule(
-            subject_profile_key, object_profile_key, access.value, action.value
+            subject_profile_key, object_profile_key, access, action
+        )
+
+    @staticmethod
+    def add_net_rule(
+        exe: str,
+        access: NET_ACCESS,
+        family: NET_FAMILY,
+        action: BPFBOX_ACTION = BPFBOX_ACTION.ALLOW,
+    ):
+        assert have_registered_uprobes
+
+        profile_key = calculate_profile_key(exe)
+
+        lib.add_net_rule(
+            profile_key, access, family, action
         )
