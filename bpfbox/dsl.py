@@ -48,7 +48,6 @@ def flags(expr):
 fs_access = flags(MatchFirst([Keyword(access.name.lower()) for access in FS_ACCESS if access not in [FS_ACCESS.NONE]]))
 signal_access = flags(MatchFirst([Keyword(access.name.lower()) for access in IPC_ACCESS if access not in [IPC_ACCESS.NONE, IPC_ACCESS.PTRACE]]))
 net_access = flags(MatchFirst([Keyword(access.name.lower()) for access in NET_ACCESS if access != NET_ACCESS.NONE]))
-
 net_family = MatchFirst([Keyword(family.name.lower()) for family in NET_FAMILY if family not in [NET_FAMILY.NONE, NET_FAMILY.UNKNOWN]])
 
 

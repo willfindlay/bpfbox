@@ -38,7 +38,7 @@ logger = get_logger()
 class IntEnum(_IntEnum):
     def __str__(self):
         return "%s" % (self._name_)
-
+      
     @classmethod
     def from_string(cls, key: str):
         try:
@@ -84,7 +84,6 @@ class BPFBOX_ACTION(IntFlag):
     DENY     = 0x00000008
     COMPLAIN = 0x00000010
 
-
 @unique
 class FS_ACCESS(IntFlag):
     NONE = 0x00000000
@@ -107,7 +106,7 @@ class IPC_ACCESS(IntFlag):
     SIGMISC = 0x00000008
     SIGCHECK = 0x00000010
     PTRACE = 0x00000020
-
+    
 @unique
 class NET_FAMILY(IntEnum):
     NONE      = 0
@@ -135,4 +134,5 @@ class NET_ACCESS(IntFlag):
     RECV    = 0x00000020
     CREATE  = 0x00000040
     SHUTDOWN = 0x00000080
+
 
