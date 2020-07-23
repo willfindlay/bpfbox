@@ -58,12 +58,12 @@ def test_open_complex_policy_no_execute_permission(policy_generator: PolicyGener
     #![profile '%s']
 
     #[taint]
-    fs('/tmp/bpfbox/a', r)
+    fs('/tmp/bpfbox/a', read)
 
     #[allow] {
-        fs('/tmp/bpfbox/a', rw)
-        fs('/tmp/bpfbox/b', a)
-        fs('/tmp/bpfbox/c', r)
+        fs('/tmp/bpfbox/a', read|write)
+        fs('/tmp/bpfbox/b', append)
+        fs('/tmp/bpfbox/c', read)
     }
 
     """ % (OPEN_PATH)
@@ -79,13 +79,13 @@ def test_open_complex_policy(policy_generator: PolicyGenerator, setup_testdir):
     #![profile '%s']
 
     #[taint]
-    fs('/tmp/bpfbox/a', r)
+    fs('/tmp/bpfbox/a', read)
 
     #[allow] {
-        fs('/tmp/bpfbox/a', rw)
-        fs('/tmp/bpfbox/b', a)
-        fs('/tmp/bpfbox/c', r)
-        fs('/tmp/bpfbox/d', x)
+        fs('/tmp/bpfbox/a', read|write)
+        fs('/tmp/bpfbox/b', append)
+        fs('/tmp/bpfbox/c', read)
+        fs('/tmp/bpfbox/d', exec)
     }
 
     """ % (OPEN_PATH)
@@ -100,12 +100,12 @@ def test_open_complex_policy_implicit_allow(policy_generator: PolicyGenerator, s
     #![profile '%s']
 
     #[taint]
-    fs('/tmp/bpfbox/a', r)
+    fs('/tmp/bpfbox/a', read)
 
-    fs('/tmp/bpfbox/a', rw)
-    fs('/tmp/bpfbox/b', a)
-    fs('/tmp/bpfbox/c', r)
-    fs('/tmp/bpfbox/d', x)
+    fs('/tmp/bpfbox/a', read|write)
+    fs('/tmp/bpfbox/b', append)
+    fs('/tmp/bpfbox/c', read)
+    fs('/tmp/bpfbox/d', exec)
 
     """ % (OPEN_PATH)
 
@@ -119,10 +119,10 @@ def test_open_link_policy(policy_generator: PolicyGenerator, setup_testdir):
     #![profile '%s']
 
     #[taint]
-    fs('/tmp/bpfbox/a', r)
+    fs('/tmp/bpfbox/a', read)
 
-    fs('/tmp/bpfbox', w)
-    fs('/tmp/bpfbox/a', l)
+    fs('/tmp/bpfbox', write)
+    fs('/tmp/bpfbox/a', link)
 
     """ % (OPEN_PATH)
 
@@ -170,10 +170,10 @@ def test_open_procfs_rules(policy_generator: PolicyGenerator, setup_testdir):
     #![profile '%s']
 
     #[taint]
-    fs('/tmp/bpfbox/a', r)
+    fs('/tmp/bpfbox/a', read)
 
-    fs('/proc', x)
-    proc('%s', rx)
+    fs('/proc', exec)
+    proc('%s', read|exec)
     """ % (OPEN_PATH, sleep_path)
 
     policy_generator.process_policy_text(text)
@@ -193,9 +193,9 @@ def test_open_proc_other_not_allowed(policy_generator: PolicyGenerator, setup_te
     #![profile '%s']
 
     #[taint]
-    fs('/tmp/bpfbox/a', r)
+    fs('/tmp/bpfbox/a', read)
 
-    fs('/proc', x)
+    fs('/proc', exec)
     """ % (OPEN_PATH)
 
     policy_generator.process_policy_text(text)
@@ -214,19 +214,21 @@ def test_ls(policy_generator: PolicyGenerator, setup_testdir):
     text = """
     #![profile '%s']
 
-    fs('/etc/ld.so.cache', rg)
-    fs('/usr/lib/libcap.so.2', rg)
-    fs('/usr/lib/libc.so.6', rg)
-    fs('/usr/lib/locale/locale-archive', rg)
-    fs('/usr/share', x)
-    fs('/proc', x)
-    fs('/tmp/bpfbox', rxg)
-    fs('/tmp/bpfbox/a', g)
-    fs('/tmp/bpfbox/b', g)
-    fs('/tmp/bpfbox/c', g)
-    fs('/tmp/bpfbox/d', g)
-    proc('/usr/bin/ls', g)
-    """ % (ls)
+    fs('%s', read)
+    fs('/etc/ld.so.cache', read|exec|getattr)
+    fs('/lib64/ld-linux-x86-64.so.2', read)
+    fs('/usr/lib/libcap.so.2', read|exec|getattr)
+    fs('/usr/lib/libc.so.6', read|exec|getattr)
+    fs('/usr/lib/locale/locale-archive', read|getattr)
+    fs('/usr/share', exec)
+    fs('/proc', exec)
+    fs('/tmp/bpfbox', read|exec|getattr)
+    fs('/tmp/bpfbox/a', getattr)
+    fs('/tmp/bpfbox/b', getattr)
+    fs('/tmp/bpfbox/c', getattr)
+    fs('/tmp/bpfbox/d', getattr)
+    proc('/usr/bin/ls', getattr)
+    """ % (ls, ls)
 
     policy_generator.process_policy_text(text)
 
@@ -238,8 +240,8 @@ def test_fs_policy_missing_file(policy_generator: PolicyGenerator, setup_testdir
     text = """
     #![profile '%s']
 
-    fs('/sdfoihsdfo/asdihsdfoui/asdpisdhf', rwx)
-    proc('/sdfoihsdfo/asdihsdfoui/asdpisdhf', g)
+    fs('/sdfoihsdfo/asdihsdfoui/asdpisdhf', read|write|exec)
+    proc('/sdfoihsdfo/asdihsdfoui/asdpisdhf', getattr)
     """ % (OPEN_PATH)
 
     policy_generator.process_policy_text(text)
@@ -249,28 +251,18 @@ def test_net_policy_smoke(policy_generator: PolicyGenerator, setup_testdir):
     #![profile '%s']
 
     #[taint] {
-        net(inet,  bind)
-        net(inet6, bind)
-        net(inet,  connect)
-        net(inet6, connect)
+        net(inet,  bind|connect)
+        net(inet6, bind|connect)
     }
 
     #[allow] {
-        net(inet,  accept)
-        net(inet6, accept)
-        net(inet,  listen)
-        net(inet6, listen)
-        net(inet,  send)
-        net(inet6, send)
-        net(inet,  recv)
-        net(inet6, recv)
+        net(inet,  accept|listen|send|recv)
+        net(inet6, accept|listen|send|recv)
     }
 
     #[audit] {
-        net(inet,  create)
-        net(inet6, create)
-        net(inet,  shutdown)
-        net(inet6, shutdown)
+        net(inet,  create|shutdown)
+        net(inet6, create|shutdown)
     }
     """ % (NET_PATH)
 
@@ -284,8 +276,7 @@ def test_net_policy(policy_generator: PolicyGenerator, setup_testdir):
     net(inet,  create)
 
     #[allow] {
-        net(inet6, create)
-        net(inet6, connect)
+        net(inet6, create|connect)
     }
     """ % (NET_PATH)
 

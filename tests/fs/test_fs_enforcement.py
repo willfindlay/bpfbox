@@ -320,7 +320,7 @@ def test_link_allowed(bpf_program: BPFProgram, caplog, setup_testdir):
     Commands.add_profile(OPEN_PATH, False)
     Commands.add_fs_rule(OPEN_PATH, '/tmp/bpfbox/a', FS_ACCESS.READ, BPFBOX_ACTION.TAINT)
     Commands.add_fs_rule(OPEN_PATH, '/tmp/bpfbox', FS_ACCESS.WRITE)
-    Commands.add_fs_rule(OPEN_PATH, '/tmp/bpfbox/a', FS_ACCESS.ADD_LINK)
+    Commands.add_fs_rule(OPEN_PATH, '/tmp/bpfbox/a', FS_ACCESS.LINK)
 
     subprocess.check_call([OPEN_PATH, 'link'])
 
@@ -328,7 +328,7 @@ def test_link_allowed(bpf_program: BPFProgram, caplog, setup_testdir):
 def test_link_no_write(bpf_program: BPFProgram, caplog, setup_testdir):
     Commands.add_profile(OPEN_PATH, False)
     Commands.add_fs_rule(OPEN_PATH, '/tmp/bpfbox/a', FS_ACCESS.READ, BPFBOX_ACTION.TAINT)
-    Commands.add_fs_rule(OPEN_PATH, '/tmp/bpfbox/a', FS_ACCESS.ADD_LINK)
+    Commands.add_fs_rule(OPEN_PATH, '/tmp/bpfbox/a', FS_ACCESS.LINK)
 
     with pytest.raises(subprocess.CalledProcessError):
         subprocess.check_call([OPEN_PATH, 'link'])
@@ -426,7 +426,7 @@ def test_malicious_symlink_cannot_read_original(bpf_program: BPFProgram, caplog,
     Commands.add_profile(OPEN_PATH, False)
     Commands.add_fs_rule(OPEN_PATH, '/tmp/bpfbox/a', FS_ACCESS.READ, BPFBOX_ACTION.TAINT)
     Commands.add_fs_rule(OPEN_PATH, '/tmp/bpfbox', FS_ACCESS.WRITE)
-    Commands.add_fs_rule(OPEN_PATH, '/tmp/bpfbox/a', FS_ACCESS.ADD_LINK)
+    Commands.add_fs_rule(OPEN_PATH, '/tmp/bpfbox/a', FS_ACCESS.LINK)
 
     with pytest.raises(subprocess.CalledProcessError):
         subprocess.check_call([OPEN_PATH, 'malicious-symlink-read'])
@@ -436,7 +436,7 @@ def test_non_malicious_symlink_can_read_original(bpf_program: BPFProgram, caplog
     Commands.add_profile(OPEN_PATH, False)
     Commands.add_fs_rule(OPEN_PATH, '/tmp/bpfbox/a', FS_ACCESS.READ, BPFBOX_ACTION.TAINT)
     Commands.add_fs_rule(OPEN_PATH, '/tmp/bpfbox', FS_ACCESS.WRITE)
-    Commands.add_fs_rule(OPEN_PATH, '/tmp/bpfbox/a', FS_ACCESS.ADD_LINK)
+    Commands.add_fs_rule(OPEN_PATH, '/tmp/bpfbox/a', FS_ACCESS.LINK)
     Commands.add_fs_rule(OPEN_PATH, '/tmp/bpfbox/a', FS_ACCESS.READ)
 
     subprocess.check_call([OPEN_PATH, 'malicious-symlink-read'])
@@ -446,9 +446,11 @@ def test_non_malicious_symlink_can_read_original(bpf_program: BPFProgram, caplog
 def test_ls(bpf_program: BPFProgram, caplog, setup_testdir):
     ls = which('ls')
     Commands.add_profile(ls, True)
-    Commands.add_fs_rule(ls, "/etc/ld.so.cache", FS_ACCESS.READ | FS_ACCESS.GETATTR)
-    Commands.add_fs_rule(ls, "/usr/lib/libcap.so.2", FS_ACCESS.READ | FS_ACCESS.GETATTR)
-    Commands.add_fs_rule(ls, "/usr/lib/libc.so.6", FS_ACCESS.READ | FS_ACCESS.GETATTR)
+    Commands.add_fs_rule(ls, ls, FS_ACCESS.READ)
+    Commands.add_fs_rule(ls, "/etc/ld.so.cache", FS_ACCESS.READ | FS_ACCESS.GETATTR | FS_ACCESS.EXEC)
+    Commands.add_fs_rule(ls, "/usr/lib/libcap.so.2", FS_ACCESS.READ | FS_ACCESS.GETATTR | FS_ACCESS.EXEC)
+    Commands.add_fs_rule(ls, "/lib64/ld-linux-x86-64.so.2", FS_ACCESS.READ)
+    Commands.add_fs_rule(ls, "/usr/lib/libc.so.6", FS_ACCESS.READ | FS_ACCESS.GETATTR | FS_ACCESS.EXEC)
     Commands.add_fs_rule(ls, "/usr/lib/locale/locale-archive", FS_ACCESS.READ | FS_ACCESS.GETATTR)
     Commands.add_fs_rule(ls, '/proc', FS_ACCESS.EXEC)
     Commands.add_fs_rule(ls, '/tmp/bpfbox', FS_ACCESS.READ | FS_ACCESS.GETATTR)

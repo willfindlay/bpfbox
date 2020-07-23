@@ -246,6 +246,27 @@ static __always_inline enum bpfbox_fs_access_t file_mask_to_access(int mask)
     return access;
 }
 
+/* Linux prot mask to bpfbox access */
+static __always_inline enum bpfbox_fs_access_t prot_mask_to_access(int mask,
+                                                                   bool shared)
+{
+    enum bpfbox_fs_access_t access = 0;
+
+    if (mask & PROT_READ) {
+        access |= FS_READ;
+    }
+
+    if (shared && (mask & PROT_WRITE)) {
+        access |= FS_WRITE;
+    }
+
+    if (mask & PROT_EXEC) {
+        access |= FS_EXEC;
+    }
+
+    return access;
+}
+
 /* Linux fmode mask to bpfbox access */
 static __always_inline enum bpfbox_fs_access_t fmode_to_access(umode_t mask)
 {
@@ -418,8 +439,8 @@ LSM_PROBE(inode_link, struct dentry *old_dentry, struct inode *dir,
 
     struct inode *old_inode = old_dentry->d_inode;
 
-    action = fs_policy_decision(process, old_inode, FS_ADD_LINK);
-    audit_fs(process, action, old_inode, FS_ADD_LINK);
+    action = fs_policy_decision(process, old_inode, FS_LINK);
+    audit_fs(process, action, old_inode, FS_LINK);
 
     return action & ACTION_DENY ? -EPERM : 0;
 
@@ -648,6 +669,68 @@ LSM_PROBE(task_to_inode, struct task_struct *target, struct inode *inode)
     fs_policy.update(&key, &policy);
 
     return 0;
+}
+
+/* =========================================================================
+ * mmap Policy
+ * ========================================================================= */
+
+LSM_PROBE(mmap_file, struct file *file, unsigned long reqprot,
+          unsigned long prot, unsigned long flags)
+{
+    struct bpfbox_process_t *process = get_current_process();
+    if (!process) {
+        return 0;
+    }
+
+    if (!file) {
+        return 0;
+    }
+
+    struct inode *inode = file->f_inode;
+
+    enum bpfbox_fs_access_t access =
+        prot_mask_to_access(prot, (flags & MAP_TYPE) == MAP_SHARED);
+
+    if (!access)
+        return 0;
+
+    enum bpfbox_action_t action = fs_policy_decision(process, inode, access);
+    audit_fs(process, action, inode, access);
+
+    return action & ACTION_DENY ? -EPERM : 0;
+}
+
+LSM_PROBE(file_mprotect, struct vm_area_struct *vma, unsigned long reqprot,
+          unsigned long prot)
+{
+    struct bpfbox_process_t *process = get_current_process();
+    if (!process) {
+        return 0;
+    }
+
+    if (!vma) {
+        return 0;
+    }
+
+    struct file *file = vma->vm_file;
+
+    if (!file) {
+        return 0;
+    }
+
+    struct inode *inode = file->f_inode;
+
+    enum bpfbox_fs_access_t access =
+        prot_mask_to_access(prot, vma->vm_flags & VM_SHARED);
+
+    if (!access)
+        return 0;
+
+    enum bpfbox_action_t action = fs_policy_decision(process, inode, access);
+    audit_fs(process, action, inode, access);
+
+    return action & ACTION_DENY ? -EPERM : 0;
 }
 
 /* =========================================================================
@@ -939,6 +1022,142 @@ LSM_PROBE(socket_connect, struct socket *sock, struct sockaddr *address,
     audit_network(process, access, family, action);
 
     return action & ACTION_DENY ? -EPERM : 0;
+}
+
+LSM_PROBE(unix_stream_connect, struct socket *sock, struct socket *other,
+          struct socket *newsock)
+{
+    struct bpfbox_process_t *process = get_current_process();
+    if (!process) {
+        return 0;
+    }
+
+    enum bpfbox_network_access_t access = NET_CONNECT;
+    enum bpfbox_network_family_t family = NET_FAMILY_UNIX;
+
+    enum bpfbox_action_t action = net_policy_decision(process, family, access);
+    audit_network(process, access, family, action);
+
+    return action & ACTION_DENY ? -EPERM : 0;
+}
+
+LSM_PROBE(unix_may_send, struct socket *sock, struct socket *other)
+{
+    struct bpfbox_process_t *process = get_current_process();
+    if (!process) {
+        return 0;
+    }
+
+    enum bpfbox_network_access_t access = NET_SEND;
+    enum bpfbox_network_family_t family = NET_FAMILY_UNIX;
+
+    enum bpfbox_action_t action = net_policy_decision(process, family, access);
+    audit_network(process, access, family, action);
+
+    return action & ACTION_DENY ? -EPERM : 0;
+}
+
+LSM_PROBE(socket_listen, struct socket *sock, int backlog)
+{
+    struct bpfbox_process_t *process = get_current_process();
+    if (!process) {
+        return 0;
+    }
+
+    enum bpfbox_network_access_t access = NET_LISTEN;
+    enum bpfbox_network_family_t family =
+        af_to_network_family(sock->sk->sk_family);
+
+    enum bpfbox_action_t action = net_policy_decision(process, family, access);
+    audit_network(process, access, family, action);
+
+    return action & ACTION_DENY ? -EPERM : 0;
+}
+
+LSM_PROBE(socket_accept, struct socket *sock, struct socket *newsock)
+{
+    struct bpfbox_process_t *process = get_current_process();
+    if (!process) {
+        return 0;
+    }
+
+    enum bpfbox_network_access_t access = NET_ACCEPT;
+    enum bpfbox_network_family_t family =
+        af_to_network_family(sock->sk->sk_family);
+
+    enum bpfbox_action_t action = net_policy_decision(process, family, access);
+    audit_network(process, access, family, action);
+
+    return action & ACTION_DENY ? -EPERM : 0;
+}
+
+LSM_PROBE(socket_sendmsg, struct socket *sock, struct msghdr *msg, int size)
+{
+    struct bpfbox_process_t *process = get_current_process();
+    if (!process) {
+        return 0;
+    }
+
+    enum bpfbox_network_access_t access = NET_SEND;
+    enum bpfbox_network_family_t family =
+        af_to_network_family(sock->sk->sk_family);
+
+    enum bpfbox_action_t action = net_policy_decision(process, family, access);
+    audit_network(process, access, family, action);
+
+    return action & ACTION_DENY ? -EPERM : 0;
+}
+
+LSM_PROBE(socket_recvmsg, struct socket *sock, struct msghdr *msg, int size,
+          int flags)
+{
+    struct bpfbox_process_t *process = get_current_process();
+    if (!process) {
+        return 0;
+    }
+
+    enum bpfbox_network_access_t access = NET_RECV;
+    enum bpfbox_network_family_t family =
+        af_to_network_family(sock->sk->sk_family);
+
+    enum bpfbox_action_t action = net_policy_decision(process, family, access);
+    audit_network(process, access, family, action);
+
+    return action & ACTION_DENY ? -EPERM : 0;
+}
+
+LSM_PROBE(socket_shutdown, struct socket *sock, int how)
+{
+    struct bpfbox_process_t *process = get_current_process();
+    if (!process) {
+        return 0;
+    }
+
+    enum bpfbox_network_access_t access = NET_SHUTDOWN;
+    enum bpfbox_network_family_t family =
+        af_to_network_family(sock->sk->sk_family);
+
+    enum bpfbox_action_t action = net_policy_decision(process, family, access);
+    audit_network(process, access, family, action);
+
+    return action & ACTION_DENY ? -EPERM : 0;
+}
+
+/* =========================================================================
+ * BPF Policy
+ * ========================================================================= */
+
+LSM_PROBE(bpf, int cmd, union bpf_attr *attr, unsigned int size)
+{
+    // TODO: deny permission if ANY process other than bpfboxd
+    // is trying to modify BPFBox's maps
+
+    struct bpfbox_process_t *process = get_current_process();
+    if (!process) {
+        return 0;
+    }
+
+    return -EPERM;
 }
 
 /* =========================================================================

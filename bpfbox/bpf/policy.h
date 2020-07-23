@@ -25,10 +25,15 @@
 
 #include <linux/binfmts.h>
 #include <linux/fs.h>
+
+#include <linux/net.h>
 #include <linux/sched.h>
 #include <linux/socket.h>
 #include <linux/version.h>
+#include <net/sock.h>
+#include <uapi/asm-generic/mman-common.h>
 #include <uapi/asm/signal.h>
+#include <uapi/linux/mman.h>
 
 /* =========================================================================
  * Profiles and Processes
@@ -91,7 +96,7 @@ enum bpfbox_fs_access_t : u32 {
     FS_GETATTR  = 0x00000020,
     FS_IOCTL    = 0x00000040,
     FS_RM       = 0x00000080,
-    FS_ADD_LINK = 0x00000100,
+    FS_LINK = 0x00000100,
 };
 
 /* uniquely computes an (inode, profile) pair. */

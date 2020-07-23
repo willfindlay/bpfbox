@@ -38,6 +38,14 @@ logger = get_logger()
 class IntEnum(_IntEnum):
     def __str__(self):
         return "%s" % (self._name_)
+      
+    @classmethod
+    def from_string(cls, key: str):
+        try:
+            return getattr(cls, key.upper())
+        except KeyError:
+            logger.warning(f'Invalid key {key.upper()} for {cls.__name__}')
+            return 0
 
 
 class IntFlag(_IntFlag):
@@ -51,6 +59,21 @@ class IntFlag(_IntFlag):
         else:
             return '|'.join([str(m._name_ or m._value_) for m in members])
 
+    @classmethod
+    def from_string(cls, key: str):
+        try:
+            return getattr(cls, key.upper())
+        except KeyError:
+            logger.warning(f'Invalid key {key.upper()} for {cls.__name__}')
+            return 0
+
+    @classmethod
+    def from_list(cls, keys: List[str]):
+        res = cls(0)
+        for k in keys:
+            res |= cls.from_string(k)
+        return res
+
 
 @unique
 class BPFBOX_ACTION(IntFlag):
@@ -60,20 +83,6 @@ class BPFBOX_ACTION(IntFlag):
     TAINT    = 0x00000004
     DENY     = 0x00000008
     COMPLAIN = 0x00000010
-
-    @staticmethod
-    def from_actions(actions: List[str]):
-        action_map = {
-                action.name.lower(): action for action in BPFBOX_ACTION if action != BPFBOX_ACTION.NONE
-                }
-        action = BPFBOX_ACTION.NONE
-        for a in actions:
-            try:
-                action |= action_map[a]
-            except KeyError:
-                pass
-        return action
-
 
 @unique
 class FS_ACCESS(IntFlag):
@@ -86,28 +95,7 @@ class FS_ACCESS(IntFlag):
     GETATTR = 0x00000020
     IOCTL = 0x00000040
     RM = 0x00000080
-    ADD_LINK = 0x00000100
-
-    @staticmethod
-    def from_string(s: str):
-        access_map = {
-            'r': FS_ACCESS.READ,
-            'w': FS_ACCESS.WRITE,
-            'a': FS_ACCESS.APPEND,
-            'x': FS_ACCESS.EXEC,
-            'l': FS_ACCESS.ADD_LINK,
-            'i': FS_ACCESS.IOCTL,
-            'g': FS_ACCESS.GETATTR,
-            's': FS_ACCESS.SETATTR,
-            'u': FS_ACCESS.RM
-        }
-        access = FS_ACCESS.NONE
-        for ell in s:
-            try:
-                access |= access_map[ell]
-            except:
-                logger.warning('Unknown access "%s"' % (ell))
-        return access
+    LINK = 0x00000100
 
 @unique
 class IPC_ACCESS(IntFlag):
@@ -118,18 +106,7 @@ class IPC_ACCESS(IntFlag):
     SIGMISC = 0x00000008
     SIGCHECK = 0x00000010
     PTRACE = 0x00000020
-
-    @staticmethod
-    def from_string(s: str):
-        access_map = {
-                access.name.lower(): access for access in IPC_ACCESS if access != IPC_ACCESS.NONE
-                }
-        try:
-            return access_map[s]
-        except KeyError:
-            logger.warning('Unknown access "%s"' % (s))
-            return IPC_ACCESS.NONE
-
+    
 @unique
 class NET_FAMILY(IntEnum):
     NONE      = 0
@@ -146,17 +123,6 @@ class NET_FAMILY(IntEnum):
     # TODO: add more here
     UNKNOWN   = auto()
 
-    @staticmethod
-    def from_string(s: str):
-        family_map = {
-                family.name.lower(): family for family in NET_FAMILY if family != NET_FAMILY.NONE
-                }
-        try:
-            return family_map[s]
-        except KeyError:
-            logger.warning('Unknown family "%s"' % (s))
-            return NET_FAMILY.NONE
-
 @unique
 class NET_ACCESS(IntFlag):
     NONE    = 0x00000000
@@ -169,14 +135,4 @@ class NET_ACCESS(IntFlag):
     CREATE  = 0x00000040
     SHUTDOWN = 0x00000080
 
-    @staticmethod
-    def from_string(s: str):
-        access_map = {
-                access.name.lower(): access for access in NET_ACCESS if access != NET_ACCESS.NONE
-                }
-        try:
-            return access_map[s]
-        except KeyError:
-            logger.warning('Unknown access "%s"' % (s))
-            return NET_ACCESS.NONE
 
