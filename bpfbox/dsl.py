@@ -21,243 +21,518 @@
 """
 
 from typing import Callable
+from pprint import pformat, pprint
 
 from pyparsing import *
 
 from bpfbox.bpf_program import BPFProgram
 from bpfbox.logger import get_logger
-from bpfbox.flags import BPFBOX_ACTION, FS_ACCESS, IPC_ACCESS, NET_ACCESS, NET_FAMILY
+from bpfbox.flags import (
+    BPFBOX_ACTION,
+    FS_ACCESS,
+    IPC_ACCESS,
+    NET_ACCESS,
+    NET_FAMILY,
+)
 from bpfbox.libbpfbox import Commands
 
 logger = get_logger()
 
-comma = Literal(',').suppress()
-lparen = Literal('(').suppress()
-rparen = Literal(')').suppress()
 
-pathname = quotedString
+class PolicyParser:
+    """
+    Parses and loads BPFBox policy.
+    """
+
+    current_profile: str = None
+
+    @classmethod
+    def process_policy_file(cls, fname: str):
+        with open(fname, 'r') as f:
+            cls.process_policy_text(f.read())
+
+    @classmethod
+    def process_policy_text(cls, txt: str):
+        policy = cls.parse_policy_text(txt)
+
+        try:
+            Commands.add_profile(policy.profile, True)
+        except Exception as e:
+            logger.error('Failed to create profile for {policy.profile}', exc_info=e)
+
+        for rule in policy.rules:
+            try:
+                rule(policy.profile)
+            except Exception as e:
+                logger.error(f'Error applying rule {rule}', exc_info=e)
+
+    @classmethod
+    def parse_policy_text(cls, txt: str):
+        return Policy.token.parseString(txt, True)[0]
+
+
+COMMA = Suppress(',')
+LPAREN = Suppress('(')
+RPAREN = Suppress(')')
+LCURL = Suppress('{')
+RCURL = Suppress('}')
+
 
 def flags(expr):
-    """
-    A list of expr delimited by |.
-    """
     return delimitedList(expr, delim='|')
 
-fs_access = flags(MatchFirst([Keyword(access.name.lower()) for access in FS_ACCESS if access not in [FS_ACCESS.NONE]]))
-signal_access = flags(MatchFirst([Keyword(access.name.lower()) for access in IPC_ACCESS if access not in [IPC_ACCESS.NONE, IPC_ACCESS.PTRACE]]))
-net_access = flags(MatchFirst([Keyword(access.name.lower()) for access in NET_ACCESS if access != NET_ACCESS.NONE]))
-net_family = MatchFirst([Keyword(family.name.lower()) for family in NET_FAMILY if family not in [NET_FAMILY.NONE, NET_FAMILY.UNKNOWN]])
+
+PATHNAME = QuotedString("'") | QuotedString('"')
+
+
+def parseable(expr: ParserElement):
+    def inner(cls: object):
+        class Parseable(cls):
+            try:
+                token = expr.setParseAction(cls.parse_action)
+            except AttributeError:
+                raise NotImplementedError(
+                    f'{cls.__name__} must implement @classmethod parse_action(cls, toks)'
+                ) from None
+
+            def __repr__(self) -> str:
+                return cls.__repr__(self)
+
+        return Parseable
+
+    return inner
+
+
+@parseable(Keyword('allow') | Keyword('taint') | Keyword('audit'))
+class MacroAction:
+    """
+    Parse the action component of a macro.
+    """
+
+    token: ParseExpression = None
+
+    @classmethod
+    def parse_action(cls, toks):
+        def append_action(rule):
+            rule.action |= BPFBOX_ACTION.from_string(toks[0])
+
+        return append_action
+
+
+@parseable(Suppress('#[') + (MacroAction.token) + Suppress(']'))
+class Macro:
+    """
+    A parseable BPFBox macro.
+    """
+
+    token: ParseExpression = None
+
+    def parse_action(self, toks):
+        return toks[0]
 
 
 class RuleBase:
-    def __init__(self, rule_dict: Dict):
-        self.rule_dict = rule_dict
+    """
+    A base class for BPFBox rules.
+    """
 
-        self.rule_actions = [a for a in self.rule_dict['macros'] if a in ['allow', 'taint', 'audit']]
-        if 'taint' not in self.rule_actions:
-            self.rule_actions.append('allow')
+    token: ParseExpression = None
 
-    def __repr__(self):
-        return self.__class__.__name__
+    def __init__(self):
+        self.action = BPFBOX_ACTION.NONE
+        self.access = 0
 
-    def __call__(self, exe):
+    def __repr__(self) -> str:
+        return str(self.__dict__)
+
+    def __call__(self) -> None:
         raise NotImplementedError('Rules must implement __call__')
 
+
+FS_ACCESS_TOKS = flags(
+    MatchFirst(
+        [
+            Keyword(access.name.lower())
+            for access in FS_ACCESS
+            if access not in [FS_ACCESS.NONE]
+        ]
+    )
+)
+
+
+@parseable(
+    ZeroOrMore(Macro.token)('macros')
+    + Keyword('fs').suppress()
+    + LPAREN
+    + PATHNAME('pathname')
+    + COMMA
+    + FS_ACCESS_TOKS('access')
+    + RPAREN
+)
 class FSRule(RuleBase):
-    def __init__(self, rule_dict: Dict):
-        super().__init__(rule_dict)
-
-    def __call__(self, exe):
-        pathname = self.rule_dict['pathname']
-        access = FS_ACCESS.from_list(self.rule_dict['access'])
-        action = BPFBOX_ACTION.from_list(self.rule_actions)
-        Commands.add_fs_rule(exe, pathname, access, action)
-
-class ProcFSRule(RuleBase):
-    def __init__(self, rule_dict: Dict):
-        super().__init__(rule_dict)
-
-    def __call__(self, exe):
-        pathname = self.rule_dict['pathname']
-        access = FS_ACCESS.from_list(self.rule_dict['access'])
-        action = BPFBOX_ACTION.from_list(self.rule_actions)
-        Commands.add_procfs_rule(exe, pathname, access, action)
-
-class SignalRule(RuleBase):
-    def __init__(self, rule_dict: Dict):
-        super().__init__(rule_dict)
-
-    def __call__(self, exe):
-        pathname = self.rule_dict['pathname']
-        access = IPC_ACCESS.from_list(self.rule_dict['access'])
-        action = BPFBOX_ACTION.from_list(self.rule_actions)
-        Commands.add_ipc_rule(exe, pathname, access, action)
-
-class PtraceRule(RuleBase):
-    def __init__(self, rule_dict: Dict):
-        super().__init__(rule_dict)
-
-    def __call__(self, exe):
-        pathname = self.rule_dict['pathname']
-        access = IPC_ACCESS.PTRACE
-        action = BPFBOX_ACTION.from_list(self.rule_actions)
-        Commands.add_ipc_rule(exe, pathname, access, action)
-
-class NetRule(RuleBase):
-    def __init__(self, rule_dict: Dict):
-        super().__init__(rule_dict)
-
-    def __call__(self, exe):
-        access = NET_ACCESS.from_list(self.rule_dict['access'])
-        family = NET_FAMILY.from_string(self.rule_dict['family'])
-        action = BPFBOX_ACTION.from_list(self.rule_actions)
-        Commands.add_net_rule(exe, access, family, action)
-
-
-class PolicyGenerator:
     """
-    Parses policy files and generates rules for the BPF programs to enforce.
+    A parseable BPFBox FS rule.
     """
 
     def __init__(self):
-        self.bnf = self._make_bnf()
-        self.exe = None
+        RuleBase.__init__(self)
+        self.pathname: str = None
+
+    @classmethod
+    def parse_action(cls, toks):
+        rule = FSRule()
+        rule.pathname = toks.get('pathname', '')
+        rule.access = FS_ACCESS.from_list(toks.get('access', []))
+        for macro in toks.get('macros', []):
+            macro(rule)
+        return rule
+
+    def __call__(self, profile: str) -> int:
+        return Commands.add_fs_rule(
+            profile, self.pathname, self.access, self.action
+        )
+
+
+@parseable(
+    ZeroOrMore(Macro.token)('macros')
+    + Keyword('proc').suppress()
+    + LPAREN
+    + PATHNAME('pathname')
+    + COMMA
+    + FS_ACCESS_TOKS('access')
+    + RPAREN
+)
+class ProcFSRule(RuleBase):
+    """
+    A parseable BPFBox ProcFS rule.
+    """
+
+    def __init__(self):
+        RuleBase.__init__(self)
+        self.other_exe: str = None
+
+    @classmethod
+    def parse_action(cls, toks):
+        rule = ProcFSRule()
+        rule.other_exe = toks.get('pathname', '')
+        rule.access = FS_ACCESS.from_list(toks.get('access', []))
+        for macro in toks.get('macros', []):
+            macro(rule)
+        return rule
+
+    def __call__(self, profile: str) -> int:
+        return Commands.add_procfs_rule(
+            profile, self.other_exe, self.access, self.action
+        )
+
+
+SIGNAL_ACCESS_TOKS = flags(
+    MatchFirst(
+        [
+            Keyword(access.name.lower())
+            for access in IPC_ACCESS
+            if access not in [IPC_ACCESS.NONE, IPC_ACCESS.PTRACE]
+        ]
+    )
+)
+
+
+@parseable(
+    ZeroOrMore(Macro.token)('macros')
+    + Keyword('signal').suppress()
+    + LPAREN
+    + (PATHNAME | Keyword('self'))('pathname')
+    + COMMA
+    + SIGNAL_ACCESS_TOKS('access')
+    + RPAREN
+)
+class SignalRule(RuleBase):
+    """
+    A parseable BPFBox Signal rule.
+    """
+
+    def __init__(self):
+        RuleBase.__init__(self)
+        self.other_exe: str = None
+
+    @classmethod
+    def parse_action(cls, toks):
+        rule = SignalRule()
+        rule.other_exe = toks.get('pathname')
+        rule.access = IPC_ACCESS.from_list(toks.get('access', []))
+        for macro in toks.get('macros', []):
+            macro(rule)
+        return rule
+
+    def __call__(self, profile: str) -> int:
+        if self.other_exe == 'self':
+            other_exe = profile
+        else:
+            other_exe = self.other_exe
+        return Commands.add_ipc_rule(
+            profile, other_exe, self.access, self.action
+        )
+
+
+@parseable(
+    ZeroOrMore(Macro.token)('macros')
+    + Keyword('ptrace').suppress()
+    + LPAREN
+    + (PATHNAME | Keyword('self'))('pathname')
+    + RPAREN
+)
+class PtraceRule(RuleBase):
+    """
+    A parseable BPFBox Ptrace rule.
+    """
+
+    def __init__(self):
+        RuleBase.__init__(self)
+        self.other_exe: str = None
+
+    @classmethod
+    def parse_action(cls, toks):
+        rule = PtraceRule()
+        rule.other_exe = toks.get('pathname')
+        rule.access = IPC_ACCESS.PTRACE
+        for macro in toks.get('macros', []):
+            macro(rule)
+        return rule
+
+    def __call__(self, profile: str) -> int:
+        if self.other_exe == 'self':
+            other_exe = profile
+        else:
+            other_exe = self.other_exe
+        return Commands.add_ipc_rule(
+            profile, other_exe, self.access, self.action
+        )
+
+
+NET_ACCESS_TOKS = flags(
+    MatchFirst(
+        [
+            Keyword(access.name.lower())
+            for access in NET_ACCESS
+            if access != NET_ACCESS.NONE
+        ]
+    )
+)
+NET_FAMILY_TOKS = MatchFirst(
+    [
+        Keyword(family.name.lower())
+        for family in NET_FAMILY
+        if family not in [NET_FAMILY.NONE, NET_FAMILY.UNKNOWN]
+    ]
+)
+
+
+@parseable(
+    ZeroOrMore(Macro.token)('macros')
+    + Keyword('net').suppress()
+    + LPAREN
+    + NET_FAMILY_TOKS('family')
+    + COMMA
+    + NET_ACCESS_TOKS('access')
+    + RPAREN
+)
+class NetRule(RuleBase):
+    """
+    A parseable BPFBox Net rule.
+    """
+
+    def __init__(self):
+        RuleBase.__init__(self)
+        self.family = NET_FAMILY.NONE
+
+    @classmethod
+    def parse_action(cls, toks):
+        rule = NetRule()
+        rule.family = NET_FAMILY.from_string(toks.get('family', ''))
+        rule.access = NET_ACCESS.from_list(toks.get('access', []))
+        for macro in toks.get('macros', []):
+            macro(rule)
+        return rule
+
+    def __call__(self, profile: str) -> int:
+        return Commands.add_net_rule(
+            profile, self.access, self.family, self.action
+        )
+
+
+@parseable(
+    ZeroOrMore(Macro.token)('macros')
+    + LCURL
+    + ZeroOrMore(
+        FSRule.token
+        | ProcFSRule.token
+        | SignalRule.token
+        | PtraceRule.token
+        | NetRule.token
+    )('rules')
+    + RCURL
+)
+class Block:
+    """
+    A block of BPFBox rules.
+    """
+
+    token: ParserElement = None
+
+    def __init__(self, rules):
+        self.rules = rules
+
+    def __repr__(self) -> str:
+        return str(self.__dict__)
+
+    @classmethod
+    def parse_action(cls, toks):
+        macros = toks.get('macros', [])
+        rules = toks.get('rules', [])
+
+        for macro in macros:
+            for rule in rules:
+                macro(rule)
+
+        return Block(rules.asList())
+
+
+RULE = (
+    FSRule.token
+    | ProcFSRule.token
+    | SignalRule.token
+    | PtraceRule.token
+    | NetRule.token
+)
+
+BLOCK = Block.token
+
+
+@parseable(
+    Suppress('#![')
+    + Keyword('profile').suppress()
+    + PATHNAME('profile')
+    + Suppress(']')
+    + ZeroOrMore(RULE('rules*') | BLOCK('blocks*'))
+)
+class Policy:
+    """
+    A BPFBox policy.
+    """
+
+    token: ParserElement = None
+
+    def __init__(self, profile: str):
+        self.profile = profile
         self.rules = []
 
-    def process_policy_file(self, policy_file: str):
-        with open(policy_file, 'r') as f:
-            self.process_policy_text(f.read())
+    def __repr__(self) -> str:
+        return str(self.__dict__)
 
-    def process_policy_text(self, policy_text: str):
-        self._parse_policy_text(policy_text)
+    @classmethod
+    def parse_action(cls, toks):
+        profile = toks.get('profile', '')
+        policy = Policy(profile)
 
-        for rule in self.rules:
-            try:
-                rule(self.exe)
-            except Exception as e:
-                logger.warning(f'Failed to apply rule {rule} for {self.exe}: {e}', exc_info=e)
+        rules = toks.get('rules', [])
+        blocks = toks.get('blocks', [])
 
-    def _parse_policy_text(self, policy_text: str) -> Dict:
-        try:
-            return self.bnf.parseString(policy_text, True).asDict()
-        except ParseException as pe:
-            logger.error('Unable to parse profile:')
-            logger.error("    " + pe.line)
-            logger.error("    " + " " * (pe.column - 1) + "^")
-            logger.error("    %s" % (pe))
-            raise pe
-        except Exception as e:
-            logger.error(f'Fatal error while parsing policy text: {e}', exc_info=e)
+        for rule in rules:
+            rule = rule[0]
+            if not rule.action:
+                rule.action = BPFBOX_ACTION.ALLOW
+            policy.rules.append(rule)
 
-    def _add_rule(self, rule_dict):
-        if rule_dict['type'] == 'fs':
-            rule = FSRule(rule_dict)
-        elif rule_dict['type'] == 'proc':
-            rule = ProcFSRule(rule_dict)
-        elif rule_dict['type'] == 'signal':
-            rule = SignalRule(rule_dict)
-        elif rule_dict['type'] == 'ptrace':
-            rule = PtraceRule(rule_dict)
-        elif rule_dict['type'] == 'net':
-            rule = NetRule(rule_dict)
-        else:
-            raise Exception('Unknown rule type %s' % (rule_dict['type']))
-        self.rules.append(rule)
+        for block in blocks:
+            for rule in block.rules:
+                if not rule.action:
+                    rule.action = BPFBOX_ACTION.ALLOW
+                policy.rules.append(rule)
 
-    def _rule_action(self, toks):
-        rule_dict = toks.asDict()['rules'][0]
-        self._add_rule(rule_dict)
+        return policy
 
-    def _block_action(self, toks):
-        block_dict = toks.asDict()['blocks'][0]
-        for rule_dict in block_dict['rules']:
-            rule_dict['macros'] += block_dict['macros']
-            self._add_rule(rule_dict)
 
-    def _profile_macro_action(self, toks):
-        self.exe = toks[0]
-        try:
-            Commands.add_profile(self.exe, True)
-        except:
-            pass
+if __name__ == '__main__':
+    text = """
+    #[allow]
+    #[taint]
+    fs("/usr/bin/hello", read|write|exec)
+    """
+    print(FSRule.token.parseString(text, True)[0])
 
-    def _make_bnf(self) -> ParserElement:
-        # Special required macro for profile
-        profile_macro = (
-            Literal('#![').suppress()
-            + Keyword('profile').suppress()
-            + quotedString('profile')
-            + Literal(']').suppress()
-            + LineEnd().suppress()
-        ).setParseAction(self._profile_macro_action)
+    text = """
+    #[allow]
+    #[taint]
+    proc("/usr/bin/hello", read|write|exec|ioctl|getattr)
+    """
+    print(ProcFSRule.token.parseString(text, True)[0])
 
-        # Rules
-        rule = self._rule().setParseAction(self._rule_action)
+    text = """
+    #[allow]
+    #[taint]
+    #[audit]
+    signal("/usr/bin/hello", sigkill|sigcheck|sigchld|sigmisc)
+    """
+    print(SignalRule.token.parseString(text, True)[0])
 
-        # Blocks
-        block = self._block().setParseAction(self._block_action)
+    text = """
+    #[allow]
+    #[taint]
+    #[audit]
+    signal(self, sigkill|sigcheck|sigchld|sigmisc)
+    """
+    print(SignalRule.token.parseString(text, True)[0])
 
-        return ZeroOrMore(cStyleComment) + profile_macro + ZeroOrMore(
-            rule('rules*') | block('blocks*') | cStyleComment
-        )
+    text = """
+    #[allow]
+    #[taint]
+    #[audit]
+    ptrace("/usr/bin/hello")
+    """
+    print(PtraceRule.token.parseString(text, True)[0])
 
-    def _self_exe(self, toks):
-        return self.exe
+    text = """
+    #[allow]
+    #[taint]
+    #[audit]
+    ptrace(self)
+    """
+    print(PtraceRule.token.parseString(text, True)[0])
 
-    def _macro_contents(self) -> ParserElement:
-        taint = Keyword('taint')
-        allow = Keyword('allow')
-        audit = Keyword('audit')
-        return allow | taint | audit
+    text = """
+    #[allow]
+    #[taint]
+    #[audit]
+    net(inet, connect|bind|accept)
+    """
+    print(NetRule.token.parseString(text, True)[0])
 
-    def _macro(self) -> ParserElement:
-        macro_contents = self._macro_contents()
-        return (
-            Literal('#[').suppress() + macro_contents + Literal(']').suppress()
-        )
+    text = """
+    #[allow]
+    #[taint] {
+        net(inet, bind|accept)
+        fs("/usr/bin/hello", read)
+        fs("/usr/bin/goodbye", read|write|exec)
+        #[audit]
+        net(inet, accept)
+    }
+    """
+    print(Block.token.parseString(text, True))
 
-    def _fs_rule(self) -> ParserElement:
-        rule_type = Literal('fs')('type')
-        return (
-            rule_type
-            + lparen
-            + pathname('pathname')
-            + comma
-            + fs_access('access')
-            + rparen
-        )
+    text = """
+    #![profile "/usr/bin/profile"]
 
-    def _procfs_rule(self) -> ParserElement:
-        rule_type = Literal('proc')('type')
-        return rule_type + lparen + pathname('pathname') + comma + fs_access('access') + rparen
+    ptrace('/foo/bar/qux')
 
-    def _signal_rule(self) -> ParserElement:
-        rule_type = Literal('signal')('type')
-        pathname_or_self = pathname | Keyword('self').setParseAction(self._self_exe)
-        return rule_type + lparen + pathname_or_self('pathname') + comma + signal_access('access') + rparen
+    #[allow]
+    proc('/usr/bin/testificate', read|write)
 
-    def _ptrace_rule(self) -> ParserElement:
-        rule_type = Literal('ptrace')('type')
-        pathname_or_self = pathname | Keyword('self').setParseAction(self._self_exe)
-        return rule_type + lparen + pathname_or_self('pathname') + rparen
-
-    def _net_rule(self) -> ParserElement:
-        rule_type = Literal('net')('type')
-        return rule_type + lparen + net_family('family') + comma + net_access('access') + rparen
-
-    def _rule(self) -> ParserElement:
-        fs_rule = self._fs_rule()
-        procfs_rule = self._procfs_rule()
-        signal_rule = self._signal_rule()
-        ptrace_rule = self._ptrace_rule()
-        net_rule = self._net_rule()
-        # TODO add more rule types here
-        return Group(Group(ZeroOrMore(self._macro()))('macros') + (fs_rule | procfs_rule | signal_rule | ptrace_rule | net_rule))
-
-    def _block(self) -> ParserElement:
-        begin = Literal('{').suppress()
-        end = Literal('}').suppress()
-        return Group(
-            Group(ZeroOrMore(self._macro()))('macros')
-            + Group(begin + ZeroOrMore(self._rule()) + end)('rules')
-        )
+    #[taint] {
+        net(inet, bind|accept)
+        fs("/usr/bin/hello", read)
+        fs("/usr/bin/goodbye", read|write|exec)
+        #[audit]
+        net(inet, accept)
+    }
+    """
+    print(Policy.token.parseString(text, True))

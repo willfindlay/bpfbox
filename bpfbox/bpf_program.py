@@ -56,8 +56,6 @@ class BPFProgram:
         self.show_ebpf = show_ebpf
         self.enforcing = enforcing
         self.have_registered_uprobes = False
-        from bpfbox.dsl import PolicyGenerator
-        self.policy_generator = PolicyGenerator()
 
     def do_tick(self) -> None:
         """do_tick.
@@ -227,7 +225,8 @@ class BPFProgram:
         for f in policy_files:
             logger.info(f'Generating policy for {f}...')
             try:
-                self.policy_generator.process_policy_file(f)
+                from bpfbox.dsl import PolicyParser
+                PolicyParser.process_policy_file(f)
             except:
                 logger.error(f'Unable to generate policy for {f}!')
         logger.info('Generated policy successfully!')
