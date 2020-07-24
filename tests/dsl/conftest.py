@@ -2,15 +2,13 @@ import logging
 
 import pytest
 
-from bpfbox.dsl import PolicyGenerator
+from bpfbox.dsl import PolicyParser
 
 DEBUG=logging.DEBUG
 
 @pytest.fixture(scope='function')
-def policy_generator(caplog):
+def policy_parser(caplog):
     # Set log level
     caplog.set_level(DEBUG)
 
-    parser = PolicyGenerator()
-
-    yield parser
+    yield PolicyParser

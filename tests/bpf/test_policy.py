@@ -29,7 +29,7 @@ import time
 from shutil import rmtree
 
 from bpfbox.bpf_program import BPFProgram
-from bpfbox.dsl import PolicyGenerator
+from bpfbox.dsl import PolicyParser
 from bpfbox.utils import which
 from bpfbox import defs
 
@@ -49,11 +49,11 @@ def setup_testdir():
     os.chmod('/tmp/bpfbox/d', 0o755)
 
 @pytest.fixture
-def policy_generator(bpf_program: BPFProgram):
-    yield PolicyGenerator()
+def policy_parser(bpf_program: BPFProgram):
+    yield PolicyParser()
 
 
-def test_open_complex_policy_no_execute_permission(policy_generator: PolicyGenerator, setup_testdir):
+def test_open_complex_policy_no_execute_permission(policy_parser: PolicyParser, setup_testdir):
     text = """
     #![profile '%s']
 
@@ -68,13 +68,13 @@ def test_open_complex_policy_no_execute_permission(policy_generator: PolicyGener
 
     """ % (OPEN_PATH)
 
-    policy_generator.process_policy_text(text)
+    policy_parser.process_policy_text(text)
 
     with pytest.raises(subprocess.CalledProcessError):
         subprocess.check_call([OPEN_PATH, 'complex'])
 
 
-def test_open_complex_policy(policy_generator: PolicyGenerator, setup_testdir):
+def test_open_complex_policy(policy_parser: PolicyParser, setup_testdir):
     text = """
     #![profile '%s']
 
@@ -90,12 +90,12 @@ def test_open_complex_policy(policy_generator: PolicyGenerator, setup_testdir):
 
     """ % (OPEN_PATH)
 
-    policy_generator.process_policy_text(text)
+    policy_parser.process_policy_text(text)
 
     subprocess.check_call([OPEN_PATH, 'complex'])
 
 
-def test_open_complex_policy_implicit_allow(policy_generator: PolicyGenerator, setup_testdir):
+def test_open_complex_policy_implicit_allow(policy_parser: PolicyParser, setup_testdir):
     text = """
     #![profile '%s']
 
@@ -109,12 +109,12 @@ def test_open_complex_policy_implicit_allow(policy_generator: PolicyGenerator, s
 
     """ % (OPEN_PATH)
 
-    policy_generator.process_policy_text(text)
+    policy_parser.process_policy_text(text)
 
     subprocess.check_call([OPEN_PATH, 'complex'])
 
 
-def test_open_link_policy(policy_generator: PolicyGenerator, setup_testdir):
+def test_open_link_policy(policy_parser: PolicyParser, setup_testdir):
     text = """
     #![profile '%s']
 
@@ -126,24 +126,24 @@ def test_open_link_policy(policy_generator: PolicyGenerator, setup_testdir):
 
     """ % (OPEN_PATH)
 
-    policy_generator.process_policy_text(text)
+    policy_parser.process_policy_text(text)
 
     subprocess.check_call([OPEN_PATH, 'link'])
 
 
-def test_open_implicit_taint(policy_generator: PolicyGenerator, setup_testdir):
+def test_open_implicit_taint(policy_parser: PolicyParser, setup_testdir):
     text = """
     #![profile '%s']
     """ % (OPEN_PATH)
 
-    policy_generator.process_policy_text(text)
+    policy_parser.process_policy_text(text)
 
     with pytest.raises(subprocess.CalledProcessError):
         subprocess.check_output([OPEN_PATH])
 
 
 @pytest.mark.skipif(not which('sleep'), reason='sleep not found on system')
-def test_ipc_policy(policy_generator: PolicyGenerator, setup_testdir):
+def test_ipc_policy(policy_parser: PolicyParser, setup_testdir):
     sleep_path = which('sleep')
     text = """
     #![profile '%s']
@@ -154,7 +154,7 @@ def test_ipc_policy(policy_generator: PolicyGenerator, setup_testdir):
     signal('%s', sigkill)
     """ % (IPC_PATH, sleep_path)
 
-    policy_generator.process_policy_text(text)
+    policy_parser.process_policy_text(text)
 
     target_pid = subprocess.Popen([sleep_path, '10']).pid
 
@@ -163,7 +163,7 @@ def test_ipc_policy(policy_generator: PolicyGenerator, setup_testdir):
 
 
 @pytest.mark.skipif(not which('sleep'), reason='sleep not found on system')
-def test_open_procfs_rules(policy_generator: PolicyGenerator, setup_testdir):
+def test_open_procfs_rules(policy_parser: PolicyParser, setup_testdir):
     sleep_path = which('sleep')
 
     text = """
@@ -176,7 +176,7 @@ def test_open_procfs_rules(policy_generator: PolicyGenerator, setup_testdir):
     proc('%s', read|exec)
     """ % (OPEN_PATH, sleep_path)
 
-    policy_generator.process_policy_text(text)
+    policy_parser.process_policy_text(text)
 
     # /proc/self should always work
     subprocess.check_call([OPEN_PATH, 'proc-self'])
@@ -186,7 +186,7 @@ def test_open_procfs_rules(policy_generator: PolicyGenerator, setup_testdir):
 
 
 @pytest.mark.skipif(not which('sleep'), reason='sleep not found on system')
-def test_open_proc_other_not_allowed(policy_generator: PolicyGenerator, setup_testdir):
+def test_open_proc_other_not_allowed(policy_parser: PolicyParser, setup_testdir):
     sleep_path = which('sleep')
 
     text = """
@@ -198,7 +198,7 @@ def test_open_proc_other_not_allowed(policy_generator: PolicyGenerator, setup_te
     fs('/proc', exec)
     """ % (OPEN_PATH)
 
-    policy_generator.process_policy_text(text)
+    policy_parser.process_policy_text(text)
 
     # /proc/self should always work
     subprocess.check_call([OPEN_PATH, 'proc-self'])
@@ -208,7 +208,7 @@ def test_open_proc_other_not_allowed(policy_generator: PolicyGenerator, setup_te
         subprocess.check_call([OPEN_PATH, 'proc-other', str(sleep_pid)])
 
 @pytest.mark.skipif(not which('ls'), reason='ls not found on system')
-def test_ls(policy_generator: PolicyGenerator, setup_testdir):
+def test_ls(policy_parser: PolicyParser, setup_testdir):
     ls = which('ls')
 
     text = """
@@ -230,12 +230,12 @@ def test_ls(policy_generator: PolicyGenerator, setup_testdir):
     proc('/usr/bin/ls', getattr)
     """ % (ls, ls)
 
-    policy_generator.process_policy_text(text)
+    policy_parser.process_policy_text(text)
 
     out = subprocess.check_output([ls, '/tmp/bpfbox']).decode('utf-8')
     assert out.strip() == '\n'.join(sorted(os.listdir('/tmp/bpfbox')))
 
-def test_fs_policy_missing_file(policy_generator: PolicyGenerator, setup_testdir):
+def test_fs_policy_missing_file(policy_parser: PolicyParser, setup_testdir):
 
     text = """
     #![profile '%s']
@@ -244,9 +244,9 @@ def test_fs_policy_missing_file(policy_generator: PolicyGenerator, setup_testdir
     proc('/sdfoihsdfo/asdihsdfoui/asdpisdhf', getattr)
     """ % (OPEN_PATH)
 
-    policy_generator.process_policy_text(text)
+    policy_parser.process_policy_text(text)
 
-def test_net_policy_smoke(policy_generator: PolicyGenerator, setup_testdir):
+def test_net_policy_smoke(policy_parser: PolicyParser, setup_testdir):
     text = """
     #![profile '%s']
 
@@ -266,9 +266,9 @@ def test_net_policy_smoke(policy_generator: PolicyGenerator, setup_testdir):
     }
     """ % (NET_PATH)
 
-    policy_generator.process_policy_text(text)
+    policy_parser.process_policy_text(text)
 
-def test_net_policy(policy_generator: PolicyGenerator, setup_testdir):
+def test_net_policy(policy_parser: PolicyParser, setup_testdir):
     text = """
     #![profile '%s']
 
@@ -280,7 +280,7 @@ def test_net_policy(policy_generator: PolicyGenerator, setup_testdir):
     }
     """ % (NET_PATH)
 
-    policy_generator.process_policy_text(text)
+    policy_parser.process_policy_text(text)
 
     subprocess.check_call([NET_PATH, 'inet-create-and-connect'])
 
