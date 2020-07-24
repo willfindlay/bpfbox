@@ -32,12 +32,10 @@ from bpfbox.libbpfbox import Commands
 logger = get_logger()
 
 comma = Literal(',').suppress()
-quoted_string = QuotedString('"') | QuotedString("'")
-comment = QuotedString(quoteChar='/*', endQuoteChar='*/', multiline=True).suppress()
 lparen = Literal('(').suppress()
 rparen = Literal(')').suppress()
 
-pathname = quoted_string
+pathname = quotedString
 
 def flags(expr):
     """
@@ -149,7 +147,7 @@ class PolicyGenerator:
             logger.error("    %s" % (pe))
             raise pe
         except Exception as e:
-            logger.error(f'Fatal error while parsing policy text: {e}')
+            logger.error(f'Fatal error while parsing policy text: {e}', exc_info=e)
 
     def _add_rule(self, rule_dict):
         if rule_dict['type'] == 'fs':
@@ -188,7 +186,7 @@ class PolicyGenerator:
         profile_macro = (
             Literal('#![').suppress()
             + Keyword('profile').suppress()
-            + quoted_string('profile')
+            + quotedString('profile')
             + Literal(']').suppress()
             + LineEnd().suppress()
         ).setParseAction(self._profile_macro_action)
@@ -199,8 +197,8 @@ class PolicyGenerator:
         # Blocks
         block = self._block().setParseAction(self._block_action)
 
-        return ZeroOrMore(comment) + profile_macro + ZeroOrMore(
-            (rule('rules*') | block('blocks*') | comment)
+        return ZeroOrMore(cStyleComment) + profile_macro + ZeroOrMore(
+            rule('rules*') | block('blocks*') | cStyleComment
         )
 
     def _self_exe(self, toks):

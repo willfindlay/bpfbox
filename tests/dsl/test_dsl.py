@@ -14,6 +14,11 @@ def test_dsl_smoke(policy_generator: PolicyGenerator):
         #[taint]
         fs("/tmp/bpfbox/b", getattr|setattr|ioctl|rm)
     }
+
+    fs("/tmp/bpfbox/c", read)
+
+    #[taint]
+    fs("/tmp/bpfbox/d", write)
     """
 
     ##[allow]
@@ -27,5 +32,5 @@ def test_dsl_smoke(policy_generator: PolicyGenerator):
     #"""
 
     parsed = policy_generator._parse_policy_text(text)
-    pprint(parsed.asDict())
+    pprint(parsed)
     assert False
