@@ -214,8 +214,9 @@ def test_ls(policy_parser: PolicyParser, setup_testdir):
     text = """
     #![profile '%s']
 
-    fs('%s', read)
+    fs('%s', read|exec)
     fs('/etc/ld.so.cache', read|exec|getattr)
+    fs('/usr/lib/ld-2.31.so', read|exec|getattr)
     fs('/lib64/ld-linux-x86-64.so.2', read)
     fs('/usr/lib/libcap.so.2', read|exec|getattr)
     fs('/usr/lib/libc.so.6', read|exec|getattr)
