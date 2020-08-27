@@ -38,7 +38,7 @@ logger = get_logger()
 class IntEnum(_IntEnum):
     def __str__(self):
         return "%s" % (self._name_)
-      
+
     @classmethod
     def from_string(cls, key: str):
         try:
@@ -86,53 +86,86 @@ class BPFBOX_ACTION(IntFlag):
 
 @unique
 class FS_ACCESS(IntFlag):
-    NONE = 0x00000000
-    READ = 0x00000001
-    WRITE = 0x00000002
-    APPEND = 0x00000004
-    EXEC = 0x00000008
-    SETATTR = 0x00000010
-    GETATTR = 0x00000020
-    IOCTL = 0x00000040
-    RM = 0x00000080
-    LINK = 0x00000100
+    NONE     = 0x00000000
+    READ     = 0x00000001
+    WRITE    = 0x00000002
+    APPEND   = 0x00000004
+    EXEC     = 0x00000008
+    SETATTR  = 0x00000010
+    GETATTR  = 0x00000020
+    IOCTL    = 0x00000040
+    RM       = 0x00000080
+    LINK     = 0x00000100
 
 @unique
 class IPC_ACCESS(IntFlag):
-    NONE = 0x00000000
-    SIGCHLD = 0x00000001
-    SIGKILL = 0x00000002
-    SIGSTOP = 0x00000004
-    SIGMISC = 0x00000008
+    NONE     = 0x00000000
+    SIGCHLD  = 0x00000001
+    SIGKILL  = 0x00000002
+    SIGSTOP  = 0x00000004
+    SIGMISC  = 0x00000008
     SIGCHECK = 0x00000010
-    PTRACE = 0x00000020
-    
+    PTRACE   = 0x00000020
+
 @unique
 class NET_FAMILY(IntEnum):
-    NONE      = 0
-    UNIX      = auto()
-    INET      = auto()
-    INET6     = auto()
-    IPX       = auto()
-    NETLINK   = auto()
-    X25       = auto()
-    AX25      = auto()
-    ATMPVC    = auto()
-    APPLETALK = auto()
-    PACKET    = auto()
-    # TODO: add more here
-    UNKNOWN   = auto()
+    UNSPEC     = 0
+    UNIX       = auto()
+    INET       = auto()
+    AX25       = auto()
+    IPX        = auto()
+    APPLETALK  = auto()
+    NETROM     = auto()
+    BRIDGE     = auto()
+    ATMPVC     = auto()
+    X25        = auto()
+    INET6      = auto()
+    ROSE       = auto()
+    DECNET     = auto()
+    NETBEUI    = auto()
+    SECURITY   = auto()
+    KEY        = auto()
+    NETLINK    = auto()
+    PACKET     = auto()
+    ASH        = auto()
+    ECONET     = auto()
+    ATMSVC     = auto()
+    RDS        = auto()
+    SNA        = auto()
+    IRDA       = auto()
+    PPPOX      = auto()
+    WANPIPE    = auto()
+    LLC        = auto()
+    IB         = auto()
+    MPLS       = auto()
+    CAN        = auto()
+    TIPC       = auto()
+    BLUETOOTH  = auto()
+    IUCV       = auto()
+    RXRPC      = auto()
+    ISDN       = auto()
+    PHONET     = auto()
+    IEEE802154 = auto()
+    CAIF       = auto()
+    ALG        = auto()
+    NFC        = auto()
+    VSOCK      = auto()
+    KCM        = auto()
+    QIPCRTR    = auto()
+    SMC        = auto()
+    XDP        = auto()
+    UNKNOWN    = auto()
 
 @unique
 class NET_ACCESS(IntFlag):
-    NONE    = 0x00000000
-    CONNECT = 0x00000001
-    BIND    = 0x00000002
-    ACCEPT  = 0x00000004
-    LISTEN  = 0x00000008
-    SEND    = 0x00000010
-    RECV    = 0x00000020
-    CREATE  = 0x00000040
+    NONE     = 0x00000000
+    CONNECT  = 0x00000001
+    BIND     = 0x00000002
+    ACCEPT   = 0x00000004
+    LISTEN   = 0x00000008
+    SEND     = 0x00000010
+    RECV     = 0x00000020
+    CREATE   = 0x00000040
     SHUTDOWN = 0x00000080
 
 

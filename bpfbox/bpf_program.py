@@ -145,13 +145,14 @@ class BPFProgram:
             logger.warning("Unable to properly clean up BPF program")
 
     def _format_exe(self, profile_key, pid=None, uid=None):
+        exe = profile_key_to_exe.get(profile_key, f'[unknown {profile_key}]')
         if pid is None:
-            return profile_key_to_exe[profile_key]
+            return exe
         if uid is None:
             extra_info = '(%d)' % (pid)
         else:
             extra_info = '(%d, %d)' % (pid, uid)
-        return '%s %s' % (profile_key_to_exe[profile_key], extra_info)
+        return '%s %s' % (exe, extra_info)
 
     def _format_dev(self, s_id, st_dev):
         return '%d (%s)' % (st_dev, s_id)
@@ -160,7 +161,7 @@ class BPFProgram:
         logger.info('Registering ring buffers...')
 
         @ringbuf_callback(self.bpf, 'fs_audit_events')
-        def fs_audit_events(ctx, event, size):
+        def _fs_audit_events(ctx, event, size):
             logger.audit(
                 'action=%s access=FS_%s exe=%s st_ino=%d st_dev=%s'
                 % (
@@ -173,7 +174,7 @@ class BPFProgram:
             )
 
         @ringbuf_callback(self.bpf, 'ipc_audit_events')
-        def ipc_audit_events(ctx, event, size):
+        def _ipc_audit_events(ctx, event, size):
             logger.audit(
                 'action=%s access=IPC_%s exe=%s target=%s'
                 % (
@@ -185,7 +186,7 @@ class BPFProgram:
             )
 
         @ringbuf_callback(self.bpf, 'network_audit_events')
-        def network_audit_events(ctx, event, size):
+        def _network_audit_events(ctx, event, size):
             logger.audit(
                 'action=%s access=NET_%s family=%s exe=%s'
                 % (
@@ -193,21 +194,6 @@ class BPFProgram:
                     NET_ACCESS(event.access),
                     NET_FAMILY(event.family),
                     self._format_exe(event.profile_key, event.pid, event.uid),
-                )
-            )
-
-        # Debugging below this line
-        if not self.debug:
-            return
-
-        @ringbuf_callback(self.bpf, 'task_to_inode_debug_events')
-        def task_to_inode_debug_events(ctx, event, size):
-            logger.debug(
-                'task_to_inode: subject=%s object=%s inode=%d'
-                % (
-                    self._format_exe(event.subject_key, event.subject_pid),
-                    self._format_exe(event.object_key, event.object_pid),
-                    event.st_ino,
                 )
             )
 
@@ -221,14 +207,15 @@ class BPFProgram:
         logger.info('Generating policy...')
         policy_files = []
         for (dirpath, dirnames, filenames) in os.walk(defs.policy_directory):
-            policy_files.extend([os.path.join(dirpath, f) for f in filenames if f.endswith('.bpfbox')])
+            policy_files.extend([os.path.join(dirpath, f) for f in filenames])
         for f in policy_files:
             logger.info(f'Generating policy for {f}...')
             try:
                 from bpfbox.dsl import PolicyParser
                 PolicyParser.process_policy_file(f)
-            except:
-                logger.error(f'Unable to generate policy for {f}!')
+            except Exception as e:
+                logger.error(f'Unable to generate policy for {f}!', exc_info=e)
+                return
         logger.info('Generated policy successfully!')
 
     def _set_cflags(self, maps_pinned):

@@ -245,15 +245,6 @@ def test_create_dir_no_write(bpf_program: BPFProgram, caplog, setup_testdir):
         subprocess.check_call([OPEN_PATH, 'create-dir'])
 
 
-def test_create_dir_no_exec(bpf_program: BPFProgram, caplog, setup_testdir):
-    Commands.add_profile(OPEN_PATH, False)
-    Commands.add_fs_rule(OPEN_PATH, '/tmp/bpfbox/a', FS_ACCESS.READ, BPFBOX_ACTION.TAINT)
-    Commands.add_fs_rule(OPEN_PATH, '/tmp/bpfbox', FS_ACCESS.WRITE)
-
-    with pytest.raises(subprocess.CalledProcessError):
-        subprocess.check_call([OPEN_PATH, 'create-dir'])
-
-
 def test_rmdir_allowed(bpf_program: BPFProgram, caplog, setup_testdir):
     os.mkdir('/tmp/bpfbox/e')
     Commands.add_profile(OPEN_PATH, False)
@@ -440,24 +431,3 @@ def test_non_malicious_symlink_can_read_original(bpf_program: BPFProgram, caplog
     Commands.add_fs_rule(OPEN_PATH, '/tmp/bpfbox/a', FS_ACCESS.READ)
 
     subprocess.check_call([OPEN_PATH, 'malicious-symlink-read'])
-
-
-@pytest.mark.skipif(not which('ls'), reason='ls not found on system')
-def test_ls(bpf_program: BPFProgram, caplog, setup_testdir):
-    ls = which('ls')
-    Commands.add_profile(ls, True)
-    Commands.add_fs_rule(ls, ls, FS_ACCESS.READ)
-    Commands.add_fs_rule(ls, "/etc/ld.so.cache", FS_ACCESS.READ | FS_ACCESS.GETATTR | FS_ACCESS.EXEC)
-    Commands.add_fs_rule(ls, "/usr/lib/libcap.so.2", FS_ACCESS.READ | FS_ACCESS.GETATTR | FS_ACCESS.EXEC)
-    Commands.add_fs_rule(ls, "/lib64/ld-linux-x86-64.so.2", FS_ACCESS.READ)
-    Commands.add_fs_rule(ls, "/usr/lib/libc.so.6", FS_ACCESS.READ | FS_ACCESS.GETATTR | FS_ACCESS.EXEC)
-    Commands.add_fs_rule(ls, "/usr/lib/locale/locale-archive", FS_ACCESS.READ | FS_ACCESS.GETATTR)
-    Commands.add_fs_rule(ls, '/proc', FS_ACCESS.EXEC)
-    Commands.add_fs_rule(ls, '/tmp/bpfbox', FS_ACCESS.READ | FS_ACCESS.GETATTR)
-    Commands.add_fs_rule(ls, '/tmp/bpfbox/a', FS_ACCESS.GETATTR)
-    Commands.add_fs_rule(ls, '/tmp/bpfbox/b', FS_ACCESS.GETATTR)
-    Commands.add_fs_rule(ls, '/tmp/bpfbox/c', FS_ACCESS.GETATTR)
-    Commands.add_fs_rule(ls, '/tmp/bpfbox/d', FS_ACCESS.GETATTR)
-
-    out = subprocess.check_output([ls, '/tmp/bpfbox']).decode('utf-8')
-    assert out.strip() == '\n'.join(sorted(os.listdir('/tmp/bpfbox')))

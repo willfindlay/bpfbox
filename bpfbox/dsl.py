@@ -322,7 +322,7 @@ NET_FAMILY_TOKS = MatchFirst(
     [
         Keyword(family.name.lower())
         for family in NET_FAMILY
-        if family not in [NET_FAMILY.NONE, NET_FAMILY.UNKNOWN]
+        if family != NET_FAMILY.UNKNOWN
     ]
 )
 
@@ -343,7 +343,7 @@ class NetRule(RuleBase):
 
     def __init__(self):
         RuleBase.__init__(self)
-        self.family = NET_FAMILY.NONE
+        self.family = NET_FAMILY.UNSPEC
 
     @classmethod
     def parse_action(cls, toks):

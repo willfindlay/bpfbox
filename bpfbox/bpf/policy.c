@@ -313,6 +313,9 @@ LSM_PROBE(inode_permission, struct inode *inode, int mask)
 
     enum bpfbox_fs_access_t access = file_mask_to_access(mask);
 
+    if(S_ISDIR(inode->i_mode))
+        access &= ~FS_EXEC;
+
     if (!access)
         return 0;
 
@@ -892,42 +895,9 @@ static __always_inline enum bpfbox_action_t net_policy_decision(
 static __always_inline enum bpfbox_network_family_t af_to_network_family(
     int family)
 {
-    switch (family) {
-        case AF_UNIX:
-            return NET_FAMILY_UNIX;
-            break;
-        case AF_INET:
-            return NET_FAMILY_INET;
-            break;
-        case AF_INET6:
-            return NET_FAMILY_INET6;
-            break;
-        case AF_IPX:
-            return NET_FAMILY_IPX;
-            break;
-        case AF_NETLINK:
-            return NET_FAMILY_NETLINK;
-            break;
-        case AF_X25:
-            return NET_FAMILY_X25;
-            break;
-        case AF_AX25:
-            return NET_FAMILY_AX25;
-            break;
-        case AF_ATMPVC:
-            return NET_FAMILY_ATMPVC;
-            break;
-        case AF_APPLETALK:
-            return NET_FAMILY_APPLETALK;
-            break;
-        case AF_PACKET:
-            return NET_FAMILY_PACKET;
-            break;
-        // TODO: add more here
-        default:
-            return NET_FAMILY_UNKNOWN;
-            break;
-    }
+    if (family >= NET_FAMILY_UNKNOWN)
+        return NET_FAMILY_UNKNOWN;
+    return family;
 }
 
 LSM_PROBE(socket_create, int _family, int type, int protocol, int kern)

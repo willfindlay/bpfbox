@@ -29,6 +29,7 @@
     2020-Jun-29  William Findlay  Created this.
 """
 
+import glob
 import os
 import sys
 import ctypes as ct
@@ -96,32 +97,11 @@ class Commands:
         assert have_registered_uprobes
 
         profile_key = calculate_profile_key(exe)
-        st_ino, st_dev = get_inode_and_device(path)
 
-        lib.add_fs_rule(profile_key, st_ino, st_dev, access, action)
-
-        if not (action & BPFBOX_ACTION.ALLOW):
-            return
-
-        # Handle full path access
-        # FIXME: is this the best way to do this?
-        try:
-            head = os.readlink(path)
-        except OSError:
-            head = path
-        while True:
-            head, tail = os.path.split(head)
-            if not head:
-                break
-            try:
-                st_ino, st_dev = get_inode_and_device(head)
-            except FileNotFoundError:
-                continue
-            access = FS_ACCESS.EXEC
-            action = BPFBOX_ACTION.ALLOW
+        paths = glob.glob(path, recursive=True)
+        for path in paths:
+            st_ino, st_dev = get_inode_and_device(path)
             lib.add_fs_rule(profile_key, st_ino, st_dev, access, action)
-            if not tail:
-                break
 
     @staticmethod
     def add_procfs_rule(
