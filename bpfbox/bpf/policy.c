@@ -128,14 +128,6 @@ static __always_inline void audit_network(struct bpfbox_process_t *process,
 }
 
 /* =========================================================================
- * Debugging
- * ========================================================================= */
-
-#ifdef BPFBOX_DEBUG
-BPF_RINGBUF_OUTPUT(task_to_inode_debug_events, BPFBOX_AUDIT_RINGBUF_PAGES);
-#endif
-
-/* =========================================================================
  * Helper Functions
  * ========================================================================= */
 
@@ -584,36 +576,6 @@ LSM_PROBE(inode_removexattr, struct dentry *dentry)
     return action & ACTION_DENY ? -EPERM : 0;
 }
 
-static __inline void debug_task_to_inode(
-    struct bpfbox_process_t *subject_process,
-    struct bpfbox_process_t *object_process, struct inode *inode)
-{
-#ifdef BPFBOX_DEBUG
-    struct debug_t {
-        u64 subject_key;
-        u32 subject_pid;
-        u64 object_key;
-        u32 object_pid;
-        u32 st_ino;
-    };
-
-    struct debug_t *debug =
-        task_to_inode_debug_events.ringbuf_reserve(sizeof(struct debug_t));
-
-    if (debug) {
-        debug->subject_key = subject_process->profile_key;
-        debug->subject_pid = subject_process->pid;
-
-        debug->object_key = object_process->profile_key;
-        debug->object_pid = object_process->pid;
-
-        debug->st_ino = inode->i_ino;
-
-        task_to_inode_debug_events.ringbuf_submit(debug, 0);
-    }
-#endif
-}
-
 /* Bookkeeping for procfs, etc. */
 LSM_PROBE(task_to_inode, struct task_struct *target, struct inode *inode)
 {
@@ -636,8 +598,6 @@ LSM_PROBE(task_to_inode, struct task_struct *target, struct inode *inode)
             FS_READ | FS_WRITE | FS_APPEND | FS_EXEC | FS_GETATTR | FS_SETATTR;
         fs_policy.update(&key, &policy);
 
-        debug_task_to_inode(subject_process, subject_process, inode);
-
         return 0;
     }
 
@@ -658,8 +618,6 @@ LSM_PROBE(task_to_inode, struct task_struct *target, struct inode *inode)
     if (!pfs_policy) {
         return 0;
     }
-
-    debug_task_to_inode(subject_process, object_process, inode);
 
     // Set fs policy according to procfs policy
     policy.allow = pfs_policy->allow;
@@ -1164,14 +1122,42 @@ LSM_PROBE(bpf, int cmd, union bpf_attr *attr, unsigned int size)
  * Process/Profile Creation and Related Bookkeeping
  * ========================================================================= */
 
-/* A task fork()s/clone()s/vfork()s */
-RAW_TRACEPOINT_PROBE(sched_process_fork)
+LSM_PROBE(bprm_committing_creds, struct linux_binprm *bprm)
+{
+    struct bpfbox_process_t *process;
+    struct bpfbox_profile_t *profile;
+
+    /* Calculate profile_key by taking inode number and filesystem device
+     * number together */
+    u64 profile_key =
+        (u64)bprm->file->f_path.dentry->d_inode->i_ino |
+        ((u64)new_encode_dev(bprm->file->f_path.dentry->d_inode->i_sb->s_dev)
+         << 32);
+
+    u32 pid  = bpf_get_current_pid_tgid();
+    u32 tgid = bpf_get_current_pid_tgid() >> 32;
+
+    profile = profiles.lookup(&profile_key);
+    if (!profile) {
+        return 0;
+    }
+
+    process = create_process(pid, tgid, profile_key, profile->taint_on_exec);
+
+    if (!process) {
+        // TODO: log error
+    }
+
+    return 0;
+}
+
+LSM_PROBE(task_alloc, struct task_struct *task, unsigned long clone_flags)
 {
     struct bpfbox_process_t *process;
     struct bpfbox_process_t *parent_process;
 
-    struct task_struct *p = (struct task_struct *)ctx->args[0];
-    struct task_struct *c = (struct task_struct *)ctx->args[1];
+    struct task_struct *c = task;
+    struct task_struct *p = task->parent;
 
     u32 ppid  = p->pid;
     u32 cpid  = c->pid;
@@ -1194,44 +1180,9 @@ RAW_TRACEPOINT_PROBE(sched_process_fork)
     return 0;
 }
 
-/* A task execve()s */
-RAW_TRACEPOINT_PROBE(sched_process_exec)
+LSM_PROBE(task_free, struct task_struct *task)
 {
-    struct bpfbox_process_t *process;
-    struct bpfbox_profile_t *profile;
-
-    u32 pid  = bpf_get_current_pid_tgid();
-    u32 tgid = bpf_get_current_pid_tgid() >> 32;
-
-    // Yoink the linux_binprm
-    struct linux_binprm *bprm = (struct linux_binprm *)ctx->args[2];
-
-    // Calculate profile_key by taking inode number and filesystem device number
-    // together
-    u64 profile_key =
-        (u64)bprm->file->f_path.dentry->d_inode->i_ino |
-        ((u64)new_encode_dev(bprm->file->f_path.dentry->d_inode->i_sb->s_dev)
-         << 32);
-
-    profile = profiles.lookup(&profile_key);
-    if (!profile) {
-        return 0;
-    }
-
-    process = create_process(pid, tgid, profile_key, profile->taint_on_exec);
-
-    if (!process) {
-        // TODO: log error
-    }
-
-    return 0;
-}
-
-/* A task exit()s/exit_group()s or is killed by kernel */
-RAW_TRACEPOINT_PROBE(sched_process_exit)
-{
-    // Delete the process if it exists
-    u32 pid = (u32)bpf_get_current_pid_tgid();
+    u32 pid = task->pid;
     processes.delete(&pid);
 
     return 0;
