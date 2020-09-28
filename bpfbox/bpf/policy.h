@@ -39,10 +39,9 @@
  * Profiles and Processes
  * ========================================================================= */
 
-enum bpfbox_process_state_t : u64 {
-    STATE_NONE    = 0x00000000,
-    STATE_TAINTED = 0x00000001,
-};
+// Reserved process states
+#define STATE_NONE    0x00000000
+#define STATE_TAINTED 0x00000001
 
 /* bpfbox-related information associated with a process (task) */
 struct bpfbox_process_t {
@@ -66,7 +65,7 @@ struct bpfbox_profile_t {
 #define bpfbox_accesss_t u32
 
 /* each action represents a BPFBox policy decision. */
-enum bpfbox_action_t : u32 {
+enum bpfbox_action_t {
     ACTION_NONE     = 0x00000000,
     ACTION_ALLOW    = 0x00000001,
     ACTION_AUDIT    = 0x00000002,
@@ -86,7 +85,7 @@ struct bpfbox_policy_t {
  * File System Policy
  * ========================================================================= */
 
-enum bpfbox_fs_access_t : u32 {
+enum bpfbox_fs_access_t {
     FS_NONE     = 0x00000000,
     FS_READ     = 0x00000001,
     FS_WRITE    = 0x00000002,
@@ -96,7 +95,7 @@ enum bpfbox_fs_access_t : u32 {
     FS_GETATTR  = 0x00000020,
     FS_IOCTL    = 0x00000040,
     FS_RM       = 0x00000080,
-    FS_LINK = 0x00000100,
+    FS_LINK     = 0x00000100,
 };
 
 /* uniquely computes an (inode, profile) pair. */
@@ -116,7 +115,7 @@ struct bpfbox_procfs_policy_key_t {
  * IPC Policy
  * ========================================================================= */
 
-enum bpfbox_ipc_access_t : u32 {
+enum bpfbox_ipc_access_t {
     IPC_NONE     = 0x00000000,
     IPC_SIGCHLD  = 0x00000001,
     IPC_SIGKILL  = 0x00000002,
@@ -137,7 +136,7 @@ struct bpfbox_ipc_policy_key_t {
  * Network Policy
  * ========================================================================= */
 
-enum bpfbox_network_family_t : u32 {
+enum bpfbox_network_family_t {
     NET_FAMILY_UNSPEC = 0,
     NET_FAMILY_UNIX,
     NET_FAMILY_INET,
@@ -187,7 +186,7 @@ enum bpfbox_network_family_t : u32 {
     NET_FAMILY_UNKNOWN,
 };
 
-enum bpfbox_network_access_t : u32 {
+enum bpfbox_network_access_t {
     NET_NONE     = 0x00000000,
     NET_CONNECT  = 0x00000001,
     NET_BIND     = 0x00000002,
