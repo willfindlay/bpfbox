@@ -1395,15 +1395,27 @@ int add_net_rule(struct pt_regs *ctx)
 }
 
 /* =========================================================================
- * uprobes for state management
+ * Uprobes/kprobes for state management
  * ========================================================================= */
 
 int bpfbox_state_probe_1(struct pt_regs *ctx)
 {
+    struct bpfbox_process_t *process = get_current_process();
+    if (!process)
+        return 0;
+
+    process->state |= 1;
+
     return 0;
 }
 
 int bpfbox_state_retprobe_1(struct pt_regs *ctx)
 {
+    struct bpfbox_process_t *process = get_current_process();
+    if (!process)
+        return 0;
+
+    process->state &= ~1;
+
     return 0;
 }
