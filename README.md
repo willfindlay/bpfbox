@@ -2,6 +2,14 @@
 
 `bpfbox` is a policy enforcement engine written in eBPF to confine process access to security-sensitive system resources.
 
+## Links
+
+Our research paper: https://www.cisl.carleton.ca/~will/written/conference/bpfbox-ccsw2020.pdf
+
+## Disclaimer
+
+`bpfbox` is very much a research prototype at this stage. Not recommended for production use before version 1.0.0.
+
 ## Roadmap / TODO
 
 - Implement auto attachment of uprobes/kprobes for process state
