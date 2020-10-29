@@ -34,14 +34,15 @@
 void add_profile(u_int64_t profile_key, u_int8_t taint_on_exec){};
 
 void add_fs_rule(u_int64_t profile_key, u_int32_t st_ino, u_int32_t st_dev,
-                 u_int32_t access_mask, u_int32_t action){};
+                 u_int32_t access_mask, u_int64_t state, u_int32_t action){};
 
 void add_procfs_rule(u_int64_t subject_profile_key,
                      u_int64_t object_profile_key, u_int32_t access,
+                     u_int64_t state,
                      u_int32_t action){};
 
 void add_ipc_rule(u_int64_t subject_profile_key, u_int64_t object_profile_key,
-                  u_int32_t access, u_int32_t action){};
+                  u_int32_t access, u_int64_t state, u_int32_t action){};
 
-void add_net_rule(u_int64_t profile_key, u_int32_t access, u_int32_t family,
+void add_net_rule(u_int64_t profile_key, u_int32_t access, u_int32_t family, u_int64_t state,
                   u_int32_t action){};

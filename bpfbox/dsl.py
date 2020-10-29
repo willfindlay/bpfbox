@@ -141,6 +141,8 @@ class RuleBase:
     def __init__(self):
         self.action = BPFBOX_ACTION.NONE
         self.access = 0
+        self.funcs = [] # type: List[str]
+        self.kfuncs = [] # type: List[str]
 
     def __repr__(self) -> str:
         return str(self.__dict__)

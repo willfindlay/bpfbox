@@ -65,7 +65,7 @@ BPF_RINGBUF_OUTPUT(fs_audit_events, BPFBOX_AUDIT_RINGBUF_PAGES);
 static __always_inline void audit_fs(struct bpfbox_process_t *process,
                                      enum bpfbox_action_t action,
                                      struct inode *inode,
-                                     bpfbox_accesss_t access)
+                                     bpfbox_access_t access)
 {
     FILTER_AUDIT(action);
 
@@ -85,7 +85,7 @@ BPF_RINGBUF_OUTPUT(ipc_audit_events, BPFBOX_AUDIT_RINGBUF_PAGES);
 
 static __always_inline void audit_ipc(struct bpfbox_process_t *subject_process,
                                       struct bpfbox_process_t *object_process,
-                                      u32 object_uid, bpfbox_accesss_t access,
+                                      u32 object_uid, bpfbox_access_t access,
                                       enum bpfbox_action_t action)
 {
     FILTER_AUDIT(action);
@@ -96,8 +96,8 @@ static __always_inline void audit_ipc(struct bpfbox_process_t *subject_process,
     DO_AUDIT_COMMON(event, subject_process, action);
 
     // TODO: make this work
-    event->object_uid         = object_uid;
-    event->object_pid         = object_process->pid;
+    event->object_uid = object_uid;
+    event->object_pid = object_process->pid;
     event->object_profile_key = object_process->profile_key;
 
     ipc_audit_events.ringbuf_submit(event, 0);
@@ -110,7 +110,7 @@ struct network_audit_event_t {
 };
 
 static __always_inline void audit_network(struct bpfbox_process_t *process,
-                                          bpfbox_accesss_t access,
+                                          bpfbox_access_t access,
                                           enum bpfbox_network_family_t family,
                                           enum bpfbox_action_t action)
 {
@@ -131,16 +131,15 @@ static __always_inline void audit_network(struct bpfbox_process_t *process,
  * Helper Functions
  * ========================================================================= */
 
-static __always_inline struct bpfbox_process_t *create_process(u32 pid,
-                                                               u32 tgid,
-                                                               u64 profile_key,
-                                                               u64 state)
+static __always_inline struct bpfbox_process_t *create_process(
+    u32 pid, u32 tgid, u64 profile_key, u64 state, bool tainted)
 {
     struct bpfbox_process_t new_process = {};
-    new_process.pid                     = pid;
-    new_process.tgid                    = tgid;
-    new_process.profile_key             = profile_key;
-    new_process.state                   = state;
+    new_process.pid = pid;
+    new_process.tgid = tgid;
+    new_process.profile_key = profile_key;
+    new_process.state = state;
+    new_process.tainted = tainted;
 
     return processes.lookup_or_try_init(&pid, &new_process);
 }
@@ -155,7 +154,7 @@ static __always_inline struct bpfbox_profile_t *create_profile(u64 profile_key,
                                                                u8 taint_on_exec)
 {
     struct bpfbox_profile_t new_profile = {};
-    new_profile.taint_on_exec           = taint_on_exec;
+    new_profile.taint_on_exec = taint_on_exec;
 
     return profiles.lookup_or_try_init(&profile_key, &new_profile);
 }
@@ -173,7 +172,7 @@ static __always_inline enum bpfbox_action_t policy_decision(
 
     enum bpfbox_action_t allow_action = ACTION_ALLOW;
 
-    bool tainted = process->state & STATE_TAINTED;
+    bool tainted = process->tainted;
 
     // If we have no policy for this object, either deny or allow,
     // depending on if the process is tainted or not
@@ -186,13 +185,13 @@ static __always_inline enum bpfbox_action_t policy_decision(
     }
 
     // Set allow action based on whether or not we want to audit
-    if (access & policy->audit) {
+    if (access & policy->audit.access && (!policy->audit.state || process->state & policy->audit.state)) {
         allow_action |= ACTION_AUDIT;
     }
 
     // Taint process if we hit a taint rule
-    if (!tainted && (access & policy->taint)) {
-        process->state |= STATE_TAINTED;
+    if (!tainted && (access & policy->taint.access) && (!policy->taint.state || process->state & policy->taint.state)) {
+        process->tainted = 1;
         return allow_action | ACTION_TAINT;
     }
 
@@ -202,7 +201,7 @@ static __always_inline enum bpfbox_action_t policy_decision(
     }
 
     // If we are tainted, but the operation is allowed
-    if ((access & policy->allow) == access) {
+    if ((access & policy->allow.access) == access && (!policy->allow.state || process->state & policy->allow.state)) {
         return allow_action;
     }
 
@@ -293,8 +292,8 @@ static __always_inline enum bpfbox_action_t fs_policy_decision(
     enum bpfbox_fs_access_t access)
 {
     struct bpfbox_fs_policy_key_t key = {
-        .st_ino      = inode->i_ino,
-        .st_dev      = (u32)new_encode_dev(inode->i_sb->s_dev),
+        .st_ino = inode->i_ino,
+        .st_dev = (u32)new_encode_dev(inode->i_sb->s_dev),
         .profile_key = process->profile_key,
     };
 
@@ -313,7 +312,7 @@ LSM_PROBE(inode_permission, struct inode *inode, int mask)
 
     enum bpfbox_fs_access_t access = file_mask_to_access(mask);
 
-    if(S_ISDIR(inode->i_mode))
+    if (S_ISDIR(inode->i_mode))
         access &= ~FS_EXEC;
 
     if (!access)
@@ -588,8 +587,8 @@ LSM_PROBE(task_to_inode, struct task_struct *target, struct inode *inode)
     }
 
     struct bpfbox_fs_policy_key_t key = {
-        .st_ino      = inode->i_ino,
-        .st_dev      = (u32)new_encode_dev(inode->i_sb->s_dev),
+        .st_ino = inode->i_ino,
+        .st_dev = (u32)new_encode_dev(inode->i_sb->s_dev),
         .profile_key = subject_process->profile_key,
     };
 
@@ -597,7 +596,7 @@ LSM_PROBE(task_to_inode, struct task_struct *target, struct inode *inode)
 
     // Allow a process to access itself
     if ((struct task_struct *)bpf_get_current_task() == target) {
-        policy.allow =
+        policy.allow.access =
             FS_READ | FS_WRITE | FS_APPEND | FS_EXEC | FS_GETATTR | FS_SETATTR;
         fs_policy.update(&key, &policy);
 
@@ -605,7 +604,7 @@ LSM_PROBE(task_to_inode, struct task_struct *target, struct inode *inode)
     }
 
     // Look up target subject_process
-    u32 target_pid                          = target->pid;
+    u32 target_pid = target->pid;
     struct bpfbox_process_t *object_process = processes.lookup(&target_pid);
     if (!object_process) {
         return 0;
@@ -613,7 +612,7 @@ LSM_PROBE(task_to_inode, struct task_struct *target, struct inode *inode)
 
     struct bpfbox_procfs_policy_key_t pfs_key = {
         .subject_profile_key = subject_process->profile_key,
-        .object_profile_key  = object_process->profile_key,
+        .object_profile_key = object_process->profile_key,
     };
 
     // Look up procfs policy from subject to object
@@ -623,9 +622,12 @@ LSM_PROBE(task_to_inode, struct task_struct *target, struct inode *inode)
     }
 
     // Set fs policy according to procfs policy
-    policy.allow = pfs_policy->allow;
-    policy.taint = pfs_policy->taint;
-    policy.audit = pfs_policy->audit;
+    policy.allow.access = pfs_policy->allow.access;
+    policy.taint.access = pfs_policy->taint.access;
+    policy.audit.access = pfs_policy->audit.access;
+    policy.allow.state = pfs_policy->allow.state;
+    policy.taint.state = pfs_policy->taint.state;
+    policy.audit.state = pfs_policy->audit.state;
 
     fs_policy.update(&key, &policy);
 
@@ -706,7 +708,7 @@ static __always_inline enum bpfbox_action_t ipc_policy_decision(
 {
     struct bpfbox_ipc_policy_key_t key = {
         .subject_key = subject_process->profile_key,
-        .object_key  = object_process->profile_key,
+        .object_key = object_process->profile_key,
     };
 
     struct bpfbox_policy_t *policy = ipc_policy.lookup(&key);
@@ -745,7 +747,7 @@ LSM_PROBE(task_kill, struct task_struct *target, struct kernel_siginfo *info,
 
     struct bpfbox_process_t *subject_process = get_current_process();
 
-    u32 target_pid                          = target->pid;
+    u32 target_pid = target->pid;
     struct bpfbox_process_t *object_process = processes.lookup(&target_pid);
 
     enum bpfbox_ipc_access_t access = signal_to_ipc_access(sig);
@@ -765,10 +767,10 @@ LSM_PROBE(task_kill, struct task_struct *target, struct kernel_siginfo *info,
     // An confined task is attempting to signal an "unconfined" task
     if (!object_process) {
         struct bpfbox_process_t unknown = {
-            .pid         = target->pid,
-            .tgid        = target->tgid,
+            .pid = target->pid,
+            .tgid = target->tgid,
             .profile_key = 0,
-            .state       = 0,
+            .state = 0,
         };
 #ifdef BPFBOX_ENFORCING
         action = ACTION_DENY;
@@ -792,7 +794,7 @@ LSM_PROBE(ptrace_access_check, struct task_struct *target, unsigned int mode)
 {
     struct bpfbox_process_t *subject_process = get_current_process();
 
-    u32 target_pid                          = target->pid;
+    u32 target_pid = target->pid;
     struct bpfbox_process_t *object_process = processes.lookup(&target_pid);
 
     enum bpfbox_ipc_access_t access = IPC_PTRACE;
@@ -812,10 +814,10 @@ LSM_PROBE(ptrace_access_check, struct task_struct *target, unsigned int mode)
     // An confined task is attempting to ptrace an "unconfined" task
     if (!object_process) {
         struct bpfbox_process_t unknown = {
-            .pid         = target->pid,
-            .tgid        = target->tgid,
+            .pid = target->pid,
+            .tgid = target->tgid,
             .profile_key = 0,
-            .state       = 0,
+            .state = 0,
         };
 #ifdef BPFBOX_ENFORCING
         action = ACTION_DENY;
@@ -839,7 +841,7 @@ LSM_PROBE(ptrace_traceme, struct task_struct *parent)
 {
     struct bpfbox_process_t *object_process = get_current_process();
 
-    u32 parent_pid                           = parent->pid;
+    u32 parent_pid = parent->pid;
     struct bpfbox_process_t *subject_process = processes.lookup(&parent_pid);
 
     enum bpfbox_ipc_access_t access = IPC_PTRACE;
@@ -885,7 +887,7 @@ static __always_inline enum bpfbox_action_t net_policy_decision(
     struct bpfbox_network_policy_key_t key = {};
 
     key.profile_key = process->profile_key;
-    key.family      = family;
+    key.family = family;
 
     struct bpfbox_policy_t *policy = net_policy.lookup(&key);
 
@@ -1104,7 +1106,7 @@ LSM_PROBE(bprm_committing_creds, struct linux_binprm *bprm)
         ((u64)new_encode_dev(bprm->file->f_path.dentry->d_inode->i_sb->s_dev)
          << 32);
 
-    u32 pid  = bpf_get_current_pid_tgid();
+    u32 pid = bpf_get_current_pid_tgid();
     u32 tgid = bpf_get_current_pid_tgid() >> 32;
 
     profile = profiles.lookup(&profile_key);
@@ -1112,7 +1114,7 @@ LSM_PROBE(bprm_committing_creds, struct linux_binprm *bprm)
         return 0;
     }
 
-    process = create_process(pid, tgid, profile_key, profile->taint_on_exec);
+    process = create_process(pid, tgid, profile_key, 0, profile->taint_on_exec);
 
     if (!process) {
         // TODO: log error
@@ -1129,8 +1131,8 @@ LSM_PROBE(task_alloc, struct task_struct *task, unsigned long clone_flags)
     struct task_struct *c = task;
     struct task_struct *p = task->parent;
 
-    u32 ppid  = p->pid;
-    u32 cpid  = c->pid;
+    u32 ppid = p->pid;
+    u32 cpid = c->pid;
     u32 ctgid = c->tgid;
 
     // Are we watching parent?
@@ -1141,7 +1143,7 @@ LSM_PROBE(task_alloc, struct task_struct *task, unsigned long clone_flags)
 
     // Create the child
     process = create_process(cpid, ctgid, parent_process->profile_key,
-                             parent_process->state);
+                             parent_process->state, parent_process->tainted);
 
     if (!process) {
         // TODO: log error
@@ -1165,25 +1167,29 @@ LSM_PROBE(task_free, struct task_struct *task)
 static __always_inline void add_policy_common(struct bpfbox_policy_t *policy,
                                               struct bpfbox_profile_t *profile,
                                               u32 access_mask,
+                                              u64 state_mask,
                                               enum bpfbox_action_t action)
 {
     if (action & ACTION_TAINT) {
         profile->taint_on_exec = 0;
-        policy->taint |= access_mask;
+        policy->taint.access |= access_mask;
+        policy->taint.state |= state_mask;
     }
 
     if (action & ACTION_ALLOW) {
-        policy->allow |= access_mask;
+        policy->allow.access |= access_mask;
+        policy->allow.state |= state_mask;
     }
 
     if (action & ACTION_AUDIT) {
-        policy->audit |= access_mask;
+        policy->audit.access |= access_mask;
+        policy->audit.state |= state_mask;
     }
 }
 
 int add_profile(struct pt_regs *ctx)
 {
-    u64 profile_key  = PT_REGS_PARM1(ctx);
+    u64 profile_key = PT_REGS_PARM1(ctx);
     u8 taint_on_exec = PT_REGS_PARM2(ctx);
 
     struct bpfbox_profile_t *profile =
@@ -1201,11 +1207,12 @@ int add_profile(struct pt_regs *ctx)
 
 int add_fs_rule(struct pt_regs *ctx)
 {
-    u64 profile_key             = PT_REGS_PARM1(ctx);
-    u32 st_ino                  = PT_REGS_PARM2(ctx);
-    u32 st_dev                  = PT_REGS_PARM3(ctx);
-    u32 access_mask             = PT_REGS_PARM4(ctx);
-    enum bpfbox_action_t action = PT_REGS_PARM5(ctx);
+    u64 profile_key = PT_REGS_PARM1(ctx);
+    u32 st_ino = PT_REGS_PARM2(ctx);
+    u32 st_dev = PT_REGS_PARM3(ctx);
+    u32 access_mask = PT_REGS_PARM4(ctx);
+    u64 state = PT_REGS_PARM5(ctx);
+    enum bpfbox_action_t action = PT_REGS_PARM6(ctx);
 
     if (action & (ACTION_DENY | ACTION_COMPLAIN)) {
         // TODO log error
@@ -1224,28 +1231,30 @@ int add_fs_rule(struct pt_regs *ctx)
     }
 
     struct bpfbox_fs_policy_key_t key = {};
-    key.profile_key                   = profile_key;
-    key.st_ino                        = st_ino;
-    key.st_dev                        = st_dev;
+    key.profile_key = profile_key;
+    key.st_ino = st_ino;
+    key.st_dev = st_dev;
+    //key.state = state;
 
-    struct bpfbox_policy_t _init   = {};
+    struct bpfbox_policy_t _init = {};
     struct bpfbox_policy_t *policy = fs_policy.lookup_or_try_init(&key, &_init);
     if (!policy) {
         // TODO log error
         return 1;
     }
 
-    add_policy_common(policy, profile, access_mask, action);
+    add_policy_common(policy, profile, access_mask, state, action);
 
     return 0;
 }
 
 int add_procfs_rule(struct pt_regs *ctx)
 {
-    u64 subject_profile_key     = PT_REGS_PARM1(ctx);
-    u64 object_profile_key      = PT_REGS_PARM2(ctx);
-    u32 access_mask             = PT_REGS_PARM3(ctx);
-    enum bpfbox_action_t action = PT_REGS_PARM4(ctx);
+    u64 subject_profile_key = PT_REGS_PARM1(ctx);
+    u64 object_profile_key = PT_REGS_PARM2(ctx);
+    u32 access_mask = PT_REGS_PARM3(ctx);
+    u64 state = PT_REGS_PARM4(ctx);
+    enum bpfbox_action_t action = PT_REGS_PARM5(ctx);
 
     if (action & (ACTION_DENY | ACTION_COMPLAIN)) {
         // TODO log error
@@ -1272,8 +1281,9 @@ int add_procfs_rule(struct pt_regs *ctx)
     }
 
     struct bpfbox_procfs_policy_key_t key = {};
-    key.subject_profile_key               = subject_profile_key;
-    key.object_profile_key                = object_profile_key;
+    key.subject_profile_key = subject_profile_key;
+    key.object_profile_key = object_profile_key;
+    //key.state = state;
 
     struct bpfbox_policy_t _init = {};
     struct bpfbox_policy_t *policy =
@@ -1283,17 +1293,18 @@ int add_procfs_rule(struct pt_regs *ctx)
         return 1;
     }
 
-    add_policy_common(policy, profile, access_mask, action);
+    add_policy_common(policy, profile, access_mask, state, action);
 
     return 0;
 }
 
 int add_ipc_rule(struct pt_regs *ctx)
 {
-    u64 subject_key             = PT_REGS_PARM1(ctx);
-    u64 object_key              = PT_REGS_PARM2(ctx);
-    u32 access_mask             = PT_REGS_PARM3(ctx);
-    enum bpfbox_action_t action = PT_REGS_PARM4(ctx);
+    u64 subject_key = PT_REGS_PARM1(ctx);
+    u64 object_key = PT_REGS_PARM2(ctx);
+    u32 access_mask = PT_REGS_PARM3(ctx);
+    u64 state = PT_REGS_PARM4(ctx);
+    enum bpfbox_action_t action = PT_REGS_PARM5(ctx);
 
     if (action & (ACTION_DENY | ACTION_COMPLAIN)) {
         // TODO log error
@@ -1319,8 +1330,9 @@ int add_ipc_rule(struct pt_regs *ctx)
     }
 
     struct bpfbox_ipc_policy_key_t key = {};
-    key.subject_key                    = subject_key;
-    key.object_key                     = object_key;
+    key.subject_key = subject_key;
+    key.object_key = object_key;
+    //key.state = state;
 
     struct bpfbox_policy_t _init = {};
     struct bpfbox_policy_t *policy =
@@ -1330,17 +1342,18 @@ int add_ipc_rule(struct pt_regs *ctx)
         return 1;
     }
 
-    add_policy_common(policy, profile, access_mask, action);
+    add_policy_common(policy, profile, access_mask, state, action);
 
     return 0;
 }
 
 int add_net_rule(struct pt_regs *ctx)
 {
-    u64 profile_key             = PT_REGS_PARM1(ctx);
-    u32 access                  = PT_REGS_PARM2(ctx);
-    u32 family                  = PT_REGS_PARM3(ctx);
-    enum bpfbox_action_t action = PT_REGS_PARM4(ctx);
+    u64 profile_key = PT_REGS_PARM1(ctx);
+    u32 access = PT_REGS_PARM2(ctx);
+    u32 family = PT_REGS_PARM3(ctx);
+    u64 state = PT_REGS_PARM4(ctx);
+    enum bpfbox_action_t action = PT_REGS_PARM5(ctx);
 
     if (action & (ACTION_DENY | ACTION_COMPLAIN)) {
         // TODO log error
@@ -1366,8 +1379,9 @@ int add_net_rule(struct pt_regs *ctx)
     }
 
     struct bpfbox_network_policy_key_t key = {};
-    key.profile_key                        = profile_key;
-    key.family                             = family;
+    key.profile_key = profile_key;
+    key.family = family;
+    //key.state = state;
 
     struct bpfbox_policy_t _init = {};
     struct bpfbox_policy_t *policy =
@@ -1377,7 +1391,33 @@ int add_net_rule(struct pt_regs *ctx)
         return 1;
     }
 
-    add_policy_common(policy, profile, access, action);
+    add_policy_common(policy, profile, access, state, action);
+
+    return 0;
+}
+
+/* =========================================================================
+ * Uprobes/kprobes for state management
+ * ========================================================================= */
+
+int bpfbox_state_probe_1(struct pt_regs *ctx)
+{
+    struct bpfbox_process_t *process = get_current_process();
+    if (!process)
+        return 0;
+
+    process->state |= 1;
+
+    return 0;
+}
+
+int bpfbox_state_retprobe_1(struct pt_regs *ctx)
+{
+    struct bpfbox_process_t *process = get_current_process();
+    if (!process)
+        return 0;
+
+    process->state &= ~1;
 
     return 0;
 }

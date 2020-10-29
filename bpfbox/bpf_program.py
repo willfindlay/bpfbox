@@ -24,7 +24,7 @@ import os
 from collections import defaultdict
 import ctypes as ct
 from textwrap import indent, dedent
-from typing import List
+from typing import List, Optional
 
 from bcc import BPF
 
@@ -217,6 +217,25 @@ class BPFProgram:
                 logger.error(f'Unable to generate policy for {f}!', exc_info=e)
                 return
         logger.info('Generated policy successfully!')
+
+    def attach_state_probe(self, state_idx: int, symbol: Optional[str] = None, address: Optional[hex] = 0x0, path: Optional[str] = None, kfunc: bool = False):
+        assert symbol or address
+        assert not (symbol and address)
+        assert kfunc or path
+        assert not (kfunc and path)
+
+        fn_name = f'bpfbox_state_probe_{state_idx}'
+        ret_fn_name = f'bpfbox_state_retprobe_{state_idx}'
+
+        if kfunc:
+            # TODO handle exceptions in loading
+            self.bpf.attach_kprobe(event=symbol, fn_name=fn_name)
+            self.bpf.attach_kretprobe(event=symbol, fn_name=ret_fn_name)
+
+        if kfunc:
+            # TODO handle exceptions in loading
+            self.bpf.attach_uprobe(name=path, sym=symbol, addr=address, fn_name=fn_name)
+            self.bpf.attach_uretprobe(name=path, sym=symbol, addr=address, fn_name=ret_fn_name)
 
     def _set_cflags(self, maps_pinned):
         flags = []

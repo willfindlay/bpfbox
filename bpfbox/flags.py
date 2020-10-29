@@ -74,7 +74,6 @@ class IntFlag(_IntFlag):
             res |= cls.from_string(k)
         return res
 
-
 @unique
 class BPFBOX_ACTION(IntFlag):
     NONE     = 0x00000000
