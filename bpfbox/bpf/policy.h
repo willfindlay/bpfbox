@@ -61,7 +61,7 @@ struct bpfbox_profile_t {
 
 /* use a #define here instead of typedef to help userspace
  * interpret arguments */
-#define bpfbox_accesss_t u32
+#define bpfbox_access_t u32
 
 /* each action represents a BPFBox policy decision. */
 enum bpfbox_action_t {
@@ -73,11 +73,16 @@ enum bpfbox_action_t {
     ACTION_COMPLAIN = 0x00000010,
 };
 
+struct bpfbox_access_state_t {
+    bpfbox_access_t access;
+    u64 state;
+};
+
 /* represents allow, taint, and audit access vectors */
 struct bpfbox_policy_t {
-    bpfbox_accesss_t allow;
-    bpfbox_accesss_t taint;
-    bpfbox_accesss_t audit;
+    struct bpfbox_access_state_t allow;
+    struct bpfbox_access_state_t taint;
+    struct bpfbox_access_state_t audit;
 };
 
 /* =========================================================================
@@ -102,14 +107,12 @@ struct bpfbox_fs_policy_key_t {
     u32 st_ino;
     u32 st_dev;
     u64 profile_key;
-    u64 state;
 };
 
 /* maps subject profile to object profile. */
 struct bpfbox_procfs_policy_key_t {
     u64 subject_profile_key;
     u64 object_profile_key;
-    u64 state;
 };
 
 /* =========================================================================
@@ -131,7 +134,6 @@ enum bpfbox_ipc_access_t {
 struct bpfbox_ipc_policy_key_t {
     u64 subject_key;
     u64 object_key;
-    u64 state;
 };
 
 /* =========================================================================
@@ -203,7 +205,6 @@ enum bpfbox_network_access_t {
 struct bpfbox_network_policy_key_t {
     u64 profile_key;
     enum bpfbox_network_family_t family;
-    u64 state;
 };
 
 /* =========================================================================
@@ -214,7 +215,7 @@ struct bpfbox_network_policy_key_t {
     u32 uid;                 \
     u32 pid;                 \
     u64 profile_key;         \
-    bpfbox_accesss_t access; \
+    bpfbox_access_t access; \
     enum bpfbox_action_t action;
 
 #define FILTER_AUDIT(action)                                          \

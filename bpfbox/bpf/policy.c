@@ -65,7 +65,7 @@ BPF_RINGBUF_OUTPUT(fs_audit_events, BPFBOX_AUDIT_RINGBUF_PAGES);
 static __always_inline void audit_fs(struct bpfbox_process_t *process,
                                      enum bpfbox_action_t action,
                                      struct inode *inode,
-                                     bpfbox_accesss_t access)
+                                     bpfbox_access_t access)
 {
     FILTER_AUDIT(action);
 
@@ -85,7 +85,7 @@ BPF_RINGBUF_OUTPUT(ipc_audit_events, BPFBOX_AUDIT_RINGBUF_PAGES);
 
 static __always_inline void audit_ipc(struct bpfbox_process_t *subject_process,
                                       struct bpfbox_process_t *object_process,
-                                      u32 object_uid, bpfbox_accesss_t access,
+                                      u32 object_uid, bpfbox_access_t access,
                                       enum bpfbox_action_t action)
 {
     FILTER_AUDIT(action);
@@ -110,7 +110,7 @@ struct network_audit_event_t {
 };
 
 static __always_inline void audit_network(struct bpfbox_process_t *process,
-                                          bpfbox_accesss_t access,
+                                          bpfbox_access_t access,
                                           enum bpfbox_network_family_t family,
                                           enum bpfbox_action_t action)
 {
@@ -185,12 +185,12 @@ static __always_inline enum bpfbox_action_t policy_decision(
     }
 
     // Set allow action based on whether or not we want to audit
-    if (access & policy->audit) {
+    if (access & policy->audit.access && (!policy->audit.state || process->state & policy->audit.state)) {
         allow_action |= ACTION_AUDIT;
     }
 
     // Taint process if we hit a taint rule
-    if (!tainted && (access & policy->taint)) {
+    if (!tainted && (access & policy->taint.access) && (!policy->taint.state || process->state & policy->taint.state)) {
         process->tainted = 1;
         return allow_action | ACTION_TAINT;
     }
@@ -201,7 +201,7 @@ static __always_inline enum bpfbox_action_t policy_decision(
     }
 
     // If we are tainted, but the operation is allowed
-    if ((access & policy->allow) == access) {
+    if ((access & policy->allow.access) == access && (!policy->allow.state || process->state & policy->allow.state)) {
         return allow_action;
     }
 
@@ -295,7 +295,6 @@ static __always_inline enum bpfbox_action_t fs_policy_decision(
         .st_ino = inode->i_ino,
         .st_dev = (u32)new_encode_dev(inode->i_sb->s_dev),
         .profile_key = process->profile_key,
-        .state = process->state,
     };
 
     struct bpfbox_policy_t *policy = fs_policy.lookup(&key);
@@ -591,14 +590,13 @@ LSM_PROBE(task_to_inode, struct task_struct *target, struct inode *inode)
         .st_ino = inode->i_ino,
         .st_dev = (u32)new_encode_dev(inode->i_sb->s_dev),
         .profile_key = subject_process->profile_key,
-        .state = subject_process->state,
     };
 
     struct bpfbox_policy_t policy = {};
 
     // Allow a process to access itself
     if ((struct task_struct *)bpf_get_current_task() == target) {
-        policy.allow =
+        policy.allow.access =
             FS_READ | FS_WRITE | FS_APPEND | FS_EXEC | FS_GETATTR | FS_SETATTR;
         fs_policy.update(&key, &policy);
 
@@ -615,7 +613,6 @@ LSM_PROBE(task_to_inode, struct task_struct *target, struct inode *inode)
     struct bpfbox_procfs_policy_key_t pfs_key = {
         .subject_profile_key = subject_process->profile_key,
         .object_profile_key = object_process->profile_key,
-        .state = subject_process->state,
     };
 
     // Look up procfs policy from subject to object
@@ -625,9 +622,12 @@ LSM_PROBE(task_to_inode, struct task_struct *target, struct inode *inode)
     }
 
     // Set fs policy according to procfs policy
-    policy.allow = pfs_policy->allow;
-    policy.taint = pfs_policy->taint;
-    policy.audit = pfs_policy->audit;
+    policy.allow.access = pfs_policy->allow.access;
+    policy.taint.access = pfs_policy->taint.access;
+    policy.audit.access = pfs_policy->audit.access;
+    policy.allow.state = pfs_policy->allow.state;
+    policy.taint.state = pfs_policy->taint.state;
+    policy.audit.state = pfs_policy->audit.state;
 
     fs_policy.update(&key, &policy);
 
@@ -709,7 +709,6 @@ static __always_inline enum bpfbox_action_t ipc_policy_decision(
     struct bpfbox_ipc_policy_key_t key = {
         .subject_key = subject_process->profile_key,
         .object_key = object_process->profile_key,
-        .state = subject_process->state,
     };
 
     struct bpfbox_policy_t *policy = ipc_policy.lookup(&key);
@@ -889,7 +888,6 @@ static __always_inline enum bpfbox_action_t net_policy_decision(
 
     key.profile_key = process->profile_key;
     key.family = family;
-    key.state = process->state;
 
     struct bpfbox_policy_t *policy = net_policy.lookup(&key);
 
@@ -1169,19 +1167,23 @@ LSM_PROBE(task_free, struct task_struct *task)
 static __always_inline void add_policy_common(struct bpfbox_policy_t *policy,
                                               struct bpfbox_profile_t *profile,
                                               u32 access_mask,
+                                              u64 state_mask,
                                               enum bpfbox_action_t action)
 {
     if (action & ACTION_TAINT) {
         profile->taint_on_exec = 0;
-        policy->taint |= access_mask;
+        policy->taint.access |= access_mask;
+        policy->taint.state |= state_mask;
     }
 
     if (action & ACTION_ALLOW) {
-        policy->allow |= access_mask;
+        policy->allow.access |= access_mask;
+        policy->allow.state |= state_mask;
     }
 
     if (action & ACTION_AUDIT) {
-        policy->audit |= access_mask;
+        policy->audit.access |= access_mask;
+        policy->audit.state |= state_mask;
     }
 }
 
@@ -1232,7 +1234,7 @@ int add_fs_rule(struct pt_regs *ctx)
     key.profile_key = profile_key;
     key.st_ino = st_ino;
     key.st_dev = st_dev;
-    key.state = state;
+    //key.state = state;
 
     struct bpfbox_policy_t _init = {};
     struct bpfbox_policy_t *policy = fs_policy.lookup_or_try_init(&key, &_init);
@@ -1241,7 +1243,7 @@ int add_fs_rule(struct pt_regs *ctx)
         return 1;
     }
 
-    add_policy_common(policy, profile, access_mask, action);
+    add_policy_common(policy, profile, access_mask, state, action);
 
     return 0;
 }
@@ -1281,7 +1283,7 @@ int add_procfs_rule(struct pt_regs *ctx)
     struct bpfbox_procfs_policy_key_t key = {};
     key.subject_profile_key = subject_profile_key;
     key.object_profile_key = object_profile_key;
-    key.state = state;
+    //key.state = state;
 
     struct bpfbox_policy_t _init = {};
     struct bpfbox_policy_t *policy =
@@ -1291,7 +1293,7 @@ int add_procfs_rule(struct pt_regs *ctx)
         return 1;
     }
 
-    add_policy_common(policy, profile, access_mask, action);
+    add_policy_common(policy, profile, access_mask, state, action);
 
     return 0;
 }
@@ -1330,7 +1332,7 @@ int add_ipc_rule(struct pt_regs *ctx)
     struct bpfbox_ipc_policy_key_t key = {};
     key.subject_key = subject_key;
     key.object_key = object_key;
-    key.state = state;
+    //key.state = state;
 
     struct bpfbox_policy_t _init = {};
     struct bpfbox_policy_t *policy =
@@ -1340,7 +1342,7 @@ int add_ipc_rule(struct pt_regs *ctx)
         return 1;
     }
 
-    add_policy_common(policy, profile, access_mask, action);
+    add_policy_common(policy, profile, access_mask, state, action);
 
     return 0;
 }
@@ -1379,7 +1381,7 @@ int add_net_rule(struct pt_regs *ctx)
     struct bpfbox_network_policy_key_t key = {};
     key.profile_key = profile_key;
     key.family = family;
-    key.state = state;
+    //key.state = state;
 
     struct bpfbox_policy_t _init = {};
     struct bpfbox_policy_t *policy =
@@ -1389,7 +1391,7 @@ int add_net_rule(struct pt_regs *ctx)
         return 1;
     }
 
-    add_policy_common(policy, profile, access, action);
+    add_policy_common(policy, profile, access, state, action);
 
     return 0;
 }
