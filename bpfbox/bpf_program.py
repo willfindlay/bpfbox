@@ -110,6 +110,7 @@ class BPFProgram:
         # Read BPF program
         with open(defs.bpf_prog_path, 'r') as f:
             source = f.read()
+        source += self.generate_state_probes()
 
         cflags = self._set_cflags(maps_pinned)
         # Load the bpf program
@@ -217,6 +218,39 @@ class BPFProgram:
                 logger.error(f'Unable to generate policy for {f}!', exc_info=e)
                 return
         logger.info('Generated policy successfully!')
+
+    def generate_state_probes(self, max_state: int = 64) -> str:
+        src = """
+/* =========================================================================
+ * Uprobes/kprobes for state management
+ * ========================================================================= */
+        """
+        probes = r"""
+int bpfbox_state_probe_NUMBER(struct pt_regs *ctx)
+{
+    struct bpfbox_process_t *process = get_current_process();
+    if (!process)
+        return 0;
+
+    process->state |= ((u64)1 << NUMBER);
+
+    return 0;
+}
+
+int bpfbox_state_retprobe_NUMBER(struct pt_regs *ctx)
+{
+    struct bpfbox_process_t *process = get_current_process();
+    if (!process)
+        return 0;
+
+    process->state &= ~((u64)1 << NUMBER);
+
+    return 0;
+}
+        """
+        for i in range(max_state):
+            src += probes.replace('NUMBER', str(i))
+        return src
 
     def attach_state_probe(self, state_idx: int, symbol: Optional[str] = None, address: Optional[hex] = 0x0, path: Optional[str] = None, kfunc: bool = False):
         assert symbol or address

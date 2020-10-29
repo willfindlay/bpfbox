@@ -119,7 +119,23 @@ class MacroAction:
         return append_action
 
 
-@parseable(Suppress('#[') + (MacroAction.token) + Suppress(']'))
+@parseable(Keyword('func') | Keyword('kfunc'))
+class MacroFunc:
+    """
+    Parse the func component of a macro.
+    """
+
+    token: ParseExpression = None
+
+    @classmethod
+    def parse_action(cls, toks):
+        def apply_state(rule):
+            pass # TODO
+
+        return apply_state
+
+
+@parseable(Suppress('#[') + (MacroAction.token | MacroFunc.token) + Suppress(']'))
 class Macro:
     """
     A parseable BPFBox macro.
