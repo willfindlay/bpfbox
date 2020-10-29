@@ -9,7 +9,7 @@
 - Re-visit policy langugage
     - Move to yaml / rego?
 - Document final version of policy language
-- Add mor unit tests / document code coverage
+- Add more unit tests / document code coverage
 
 ## Requirements
 
