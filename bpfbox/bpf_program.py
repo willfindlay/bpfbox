@@ -31,7 +31,12 @@ from bcc import BPF
 from bpfbox import defs
 from bpfbox.logger import get_logger
 from bpfbox.flags import BPFBOX_ACTION, FS_ACCESS, IPC_ACCESS, NET_ACCESS, NET_FAMILY
-from bpfbox.utils import calculate_profile_key, get_inode_and_device, which, profile_key_to_exe
+from bpfbox.utils import (
+    calculate_profile_key,
+    get_inode_and_device,
+    which,
+    profile_key_to_exe,
+)
 from bpfbox.libbpfbox import register_uprobes
 
 logger = get_logger()
@@ -182,7 +187,9 @@ class BPFProgram:
                     BPFBOX_ACTION(event.action),
                     IPC_ACCESS(event.access),
                     self._format_exe(event.profile_key, event.pid, event.uid),
-                    self._format_exe(event.object_profile_key, event.object_pid, event.object_uid),
+                    self._format_exe(
+                        event.object_profile_key, event.object_pid, event.object_uid
+                    ),
                 )
             )
 
@@ -198,7 +205,6 @@ class BPFProgram:
                 )
             )
 
-
     def _register_uprobes(self):
         logger.info('Registering uprobes...')
         register_uprobes(self.bpf)
@@ -212,8 +218,7 @@ class BPFProgram:
         for f in policy_files:
             logger.info(f'Generating policy for {f}...')
             try:
-                from bpfbox.dsl import PolicyParser
-                PolicyParser.process_policy_file(f)
+                pass
             except Exception as e:
                 logger.error(f'Unable to generate policy for {f}!', exc_info=e)
                 return
@@ -252,7 +257,14 @@ int bpfbox_state_retprobe_NUMBER(struct pt_regs *ctx)
             src += probes.replace('NUMBER', str(i))
         return src
 
-    def attach_state_probe(self, state_idx: int, symbol: Optional[str] = None, address: Optional[hex] = 0x0, path: Optional[str] = None, kfunc: bool = False):
+    def attach_state_probe(
+        self,
+        state_idx: int,
+        symbol: Optional[str] = None,
+        address: Optional[hex] = 0x0,
+        path: Optional[str] = None,
+        kfunc: bool = False,
+    ):
         assert symbol or address
         assert not (symbol and address)
         assert kfunc or path
@@ -269,7 +281,9 @@ int bpfbox_state_retprobe_NUMBER(struct pt_regs *ctx)
         if kfunc:
             # TODO handle exceptions in loading
             self.bpf.attach_uprobe(name=path, sym=symbol, addr=address, fn_name=fn_name)
-            self.bpf.attach_uretprobe(name=path, sym=symbol, addr=address, fn_name=ret_fn_name)
+            self.bpf.attach_uretprobe(
+                name=path, sym=symbol, addr=address, fn_name=ret_fn_name
+            )
 
     def _set_cflags(self, maps_pinned):
         flags = []
@@ -292,17 +306,13 @@ int bpfbox_state_retprobe_NUMBER(struct pt_regs *ctx)
         flags.append('-DBPFBOX_MAX_STRING_SIZE=%d' % (defs.max_string_size))
 
         # Ringbuf sizes
-        flags.append(
-            '-DBPFBOX_AUDIT_RINGBUF_PAGES=%d' % (defs.audit_ringbuf_pages)
-        )
+        flags.append('-DBPFBOX_AUDIT_RINGBUF_PAGES=%d' % (defs.audit_ringbuf_pages))
 
         # Map sizes
         flags.append('-DBPFBOX_MAX_POLICY_SIZE=%d' % (defs.max_policy_size))
         flags.append('-DBPFBOX_MAX_PROCESSES=%d' % (defs.max_processes))
 
-        logger.debug(
-            'Using cflags:\n%s' % (indent('\n'.join(flags), ' ' * 32))
-        )
+        logger.debug('Using cflags:\n%s' % (indent('\n'.join(flags), ' ' * 32)))
 
         return flags
 
@@ -316,13 +326,9 @@ int bpfbox_state_retprobe_NUMBER(struct pt_regs *ctx)
             os.unlink(fn)
 
         # pin the map
-        ret = lib.bpf_obj_pin(
-            self.bpf[name.encode('utf-8')].map_fd, fn.encode('utf-8')
-        )
+        ret = lib.bpf_obj_pin(self.bpf[name.encode('utf-8')].map_fd, fn.encode('utf-8'))
         if ret:
-            logger.error(
-                f"Could not pin map {name}: {os.strerror(ct.get_errno())}"
-            )
+            logger.error(f"Could not pin map {name}: {os.strerror(ct.get_errno())}")
         else:
             logger.debug(f"Pinned map {name} to {fn}")
 
