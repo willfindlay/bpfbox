@@ -16,6 +16,7 @@ blocks:
           - sudo apt-get install -y qemu-system-x86
           - sudo apt install -y gcc g++ bison build-essential cmake flex git libedit-dev clang-9 llvm-9 libllvm9 llvm-9-dev libclang-9-dev python zlib1g-dev libelf-dev libfl-dev
           - git clone https://github.com/iovisor/bcc.git /tmp/bcc
+          - pushd /tmp/bcc/src/cc/libbpf/src && make -j $(nproc) && sudo make install && popd
           - mkdir /tmp/bcc/build
           - pushd /tmp/bcc/build && cmake -DPYTHON_CMD=python3 .. && make -j $(nproc) && sudo make install && pushd src/python && make -j $(nproc)  && sudo make install && popd && popd
       env_vars:
