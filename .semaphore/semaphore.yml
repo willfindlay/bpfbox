@@ -3,7 +3,7 @@ name: CI Build
 
 agent:
   machine:
-    type: e1-standard-2
+    type: e1-standard-8
     os_image: ubuntu1804
 
 blocks:
@@ -14,10 +14,10 @@ blocks:
           - checkout
           - sudo pip3 install https://github.com/amluto/virtme/archive/538f1e756139a6b57a4780e7ceb3ac6bcaa4fe6f.zip
           - sudo apt-get install -y qemu-system-x86
-          - sudo apt-get -y install bison build-essential cmake flex git libedit-dev libllvm6.0 llvm-6.0-dev libclang-6.0-dev python zlib1g-dev libelf-dev
+          - sudo apt-get -y install bison build-essential cmake flex git libedit-dev libllvm9 llvm-9-dev libclang-9-dev python zlib1g-dev libelf-dev
           - git clone https://github.com/iovisor/bcc.git /tmp/bcc
           - mkdir /tmp/bcc/build
-          - pushd /tmp/bcc/build && cmake -DPYTHON_CMD=python3 .. && make && sudo make install && pushd src/python && make && sudo make install && popd && popd
+          - pushd /tmp/bcc/build && cmake -DPYTHON_CMD=python3 .. && make -j $(nproc) && sudo make install && pushd src/python && make -j $(nproc)  && sudo make install && popd && popd
       env_vars:
         - name: TMPDIR
           value: /tmp
