@@ -14,7 +14,7 @@ blocks:
           - checkout
           - sudo pip3 install https://github.com/amluto/virtme/archive/538f1e756139a6b57a4780e7ceb3ac6bcaa4fe6f.zip
           - sudo apt-get install -y qemu-system-x86
-          - sudo apt install -y gcc g++ bison build-essential cmake flex git libedit-dev llvm-11 libllvm11 llvm-11-dev libclang-11-dev python zlib1g-dev libelf-dev libfl-dev
+          - sudo apt install -y gcc g++ bison build-essential cmake flex git libedit-dev llvm-10 libllvm10 llvm-10-dev libclang-10-dev python zlib1g-dev libelf-dev libfl-dev
           - git clone https://github.com/iovisor/bcc.git /tmp/bcc
           - mkdir /tmp/bcc/build
           - pushd /tmp/bcc/build && cmake -DPYTHON_CMD=python3 .. && make -j $(nproc) && sudo make install && pushd src/python && make -j $(nproc)  && sudo make install && popd && popd
