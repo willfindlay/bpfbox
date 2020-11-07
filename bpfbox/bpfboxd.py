@@ -49,12 +49,9 @@ class BPFBoxd(DaemonMixin):
     """
 
     def __init__(self, args: List[str]):
-        print(args.show_ebpf)
         self.ticksleep = defs.ticksleep
         self.bpf_program = BPFProgram(
-            enforcing=args.enforcing,
-            debug=args.debug,
-            show_ebpf=args.show_ebpf,
+            enforcing=args.enforcing, debug=args.debug, show_ebpf=args.show_ebpf,
         )
 
         self._register_exit_hooks()
@@ -87,7 +84,7 @@ class BPFBoxd(DaemonMixin):
 
     def _load_policy(self):
         self.bpf_program.load_bpf(maps_pinned=False)
-        self.bpf_program.generate_policy()
+        self.bpf_program.load_policy()
 
 
 def main(args=sys.argv[1:]) -> None:

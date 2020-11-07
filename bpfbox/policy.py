@@ -24,6 +24,9 @@ from __future__ import annotations
 from typing import Union, IO, Dict, Any, Optional, List
 from abc import ABC
 
+from bpfbox.libbpfbox import Commands
+from bpfbox.flags import BPFBOX_ACTION, FS_ACCESS, IPC_ACCESS, NET_FAMILY, NET_ACCESS
+
 # from bcc import BPF
 from jsonschema import validate
 
@@ -37,145 +40,122 @@ SCHEMA = {
             'type': 'array',
             'items': {
                 'type': 'object',
-                'additionalProperties': False,
-                'properties': {
-                    'action': {
-                        'anyOf': [
-                            {'$ref': '#/definitions/action'},
-                            {
-                                'type': 'array',
-                                'items': {'$ref': '#/definitions/action'},
-                            },
-                        ]
+                'allOf': [
+                    {'$ref': '#/definitions/rule'},
+                    {
+                        'file': {
+                            'anyOf': [
+                                {'type': 'string'},
+                                {'type': 'array', 'items': {'type': 'string'}},
+                            ]
+                        },
+                        'access': {
+                            'anyOf': [
+                                {'$ref': '#/definitions/file_access'},
+                                {
+                                    'type': 'array',
+                                    'items': {'$ref': '#/definitions/file_access'},
+                                },
+                            ]
+                        },
                     },
-                    'func': {
-                        'anyOf': [
-                            {'type': 'string'},
-                            {'type': 'array', 'items': {'type': 'string'}},
-                        ]
-                    },
-                    'kfunc': {
-                        'anyOf': [
-                            {'type': 'string'},
-                            {'type': 'array', 'items': {'type': 'string'}},
-                        ]
-                    },
-                    'file': {
-                        'anyOf': [
-                            {'type': 'string'},
-                            {'type': 'array', 'items': {'type': 'string'}},
-                        ]
-                    },
-                    'access': {
-                        'anyOf': [
-                            {'$ref': '#/definitions/file_access'},
-                            {
-                                'type': 'array',
-                                'items': {'$ref': '#/definitions/file_access'},
-                            },
-                        ]
-                    },
-                },
-                'required': ['action', 'file', 'access'],
+                ],
+                'required': ['file', 'access'],
             },
         },
         'net': {
             'type': 'array',
             'items': {
                 'type': 'object',
-                'additionalProperties': False,
-                'properties': {
-                    'action': {
-                        'anyOf': [
-                            {'$ref': '#/definitions/action'},
-                            {
-                                'type': 'array',
-                                'items': {'$ref': '#/definitions/action'},
+                'allOf': [
+                    {'$ref': '#/definitions/rule'},
+                    {
+                        'properties': {
+                            'family': {
+                                'anyOf': [
+                                    {'$ref': '#/definitions/socket_families'},
+                                    {
+                                        'type': 'array',
+                                        'items': {
+                                            '$ref': '#/definitions/socket_families'
+                                        },
+                                    },
+                                ]
                             },
-                        ]
-                    },
-                    'func': {
-                        'anyOf': [
-                            {'type': 'string'},
-                            {'type': 'array', 'items': {'type': 'string'}},
-                        ]
-                    },
-                    'kfunc': {
-                        'anyOf': [
-                            {'type': 'string'},
-                            {'type': 'array', 'items': {'type': 'string'}},
-                        ]
-                    },
-                    'family': {
-                        'anyOf': [
-                            {'$ref': '#/definitions/socket_families'},
-                            {
-                                'type': 'array',
-                                'items': {'$ref': '#/definitions/socket_families'},
+                            'operation': {
+                                'anyOf': [
+                                    {'$ref': '#/definitions/socket_operations'},
+                                    {
+                                        'type': 'array',
+                                        'items': {
+                                            '$ref': '#/definitions/socket_operations'
+                                        },
+                                    },
+                                ]
                             },
-                        ]
+                        }
                     },
-                    'operation': {
-                        'anyOf': [
-                            {'$ref': '#/definitions/socket_operations'},
-                            {
-                                'type': 'array',
-                                'items': {'$ref': '#/definitions/socket_operations'},
-                            },
-                        ]
-                    },
-                },
-                'required': ['action', 'family', 'operation'],
+                ],
+                'required': ['family', 'operation'],
             },
         },
         'signal': {
             'type': 'array',
             'items': {
                 'type': 'object',
-                'additionalProperties': False,
-                'properties': {
-                    'action': {
-                        'anyOf': [
-                            {'$ref': '#/definitions/action'},
-                            {
-                                'type': 'array',
-                                'items': {'$ref': '#/definitions/action'},
+                'allOf': [
+                    {'$ref': '#/definitions/rule'},
+                    {
+                        'properties': {
+                            'signal': {
+                                'anyOf': [
+                                    {'$ref': '#/definitions/signal_signals'},
+                                    {
+                                        'type': 'array',
+                                        'items': {
+                                            '$ref': '#/definitions/signal_signals'
+                                        },
+                                    },
+                                ]
                             },
-                        ]
-                    },
-                    'func': {
-                        'anyOf': [
-                            {'type': 'string'},
-                            {'type': 'array', 'items': {'type': 'string'}},
-                        ]
-                    },
-                    'kfunc': {
-                        'anyOf': [
-                            {'type': 'string'},
-                            {'type': 'array', 'items': {'type': 'string'}},
-                        ]
-                    },
-                    'signal': {
-                        'anyOf': [
-                            {'$ref': '#/definitions/signal_signals'},
-                            {
-                                'type': 'array',
-                                'items': {'$ref': '#/definitions/signal_signals'},
+                            'target': {
+                                'anyOf': [
+                                    {'type': 'string'},
+                                    {'type': 'array', 'items': {'type': 'string'}},
+                                ]
                             },
-                        ]
+                        }
                     },
-                    'target': {
-                        'anyOf': [
-                            {'type': 'string'},
-                            {'type': 'array', 'items': {'type': 'string'}},
-                        ]
-                    },
-                },
-                'required': ['action', 'signal', 'target'],
+                ],
+                'required': ['signal', 'target'],
             },
         },
     },
     'definitions': {
+        'rule': {
+            'type': 'object',
+            'properties': {
+                'action': {
+                    'anyOf': [
+                        {'$ref': '#/definitions/action'},
+                        {'type': 'array', 'items': {'$ref': '#/definitions/action'},},
+                    ]
+                },
+                'func': {
+                    'anyOf': [
+                        {'type': 'string'},
+                        {'type': 'array', 'items': {'type': 'string'}},
+                    ]
+                },
+                'kfunc': {
+                    'anyOf': [
+                        {'type': 'string'},
+                        {'type': 'array', 'items': {'type': 'string'}},
+                    ]
+                },
+            },
+            'required': ['action'],
+        },
         'action': {'enum': ['allow', 'audit', 'taint']},
         'file_access': {
             'enum': [
@@ -277,42 +257,12 @@ class PolicyLoadException(Exception):
     pass
 
 
-#    def attach(self, bpf: BPF):
-#        fn_name = f'bpfbox_state_probe_{self.state_idx}'
-#        ret_fn_name = f'bpfbox_state_retprobe_{self.state_idx}'
-#
-#        bpf.attach_uprobe(
-#            name=self.profile_path,
-#            event=self.symbol,
-#            address=self.address,
-#            fn_name=fn_name,
-#        )
-#        bpf.attach_uretprobe(
-#            name=self.profile_path,
-#            event=self.symbol,
-#            address=self.address,
-#            fn_name=ret_fn_name,
-#        )
-#
-#    def attach(self, bpf: BPF):
-#        fn_name = f'bpfbox_state_probe_{self.state_idx}'
-#        ret_fn_name = f'bpfbox_state_retprobe_{self.state_idx}'
-#
-#        bpf.attach_kprobe(
-#            event=self.symbol, address=self.address, fn_name=fn_name,
-#        )
-#        bpf.attach_kretprobe(
-#            event=self.symbol, address=self.address, fn_name=ret_fn_name,
-#        )
-
-
 class Rule(ABC):
     """
     A base class for rules.
     """
 
-    def __init__(self, policy: Policy, rule_dict: Dict[str, Any]):
-        self.policy = policy
+    def __init__(self, rule_dict: Dict[str, Any]):
         self.action = listify(rule_dict.get('action', ['allow']))
         self.func = listify(rule_dict.get('func', []))
         self.kfunc = listify(rule_dict.get('kfunc', []))
@@ -321,14 +271,41 @@ class Rule(ABC):
             assert action in ['allow', 'taint', 'audit']
 
     def __repr__(self):
-        return f'{self.__class__.__name__}({self.__dict__})'
+        return f'{self.__class__.__name__}({self.__dict__}))'
 
-    def load(self):
+    def calculate_state_number(self, policy: Policy):
+        """
+        Calculate the required state number based on funcs and kfuncs.
+        """
+
+        state = 0
+
+        for func in self.func:
+            state |= 1 << policy.funcs[(func, False)]
+
+        for kfunc in self.kfunc:
+            state |= 1 << policy.funcs[(kfunc, True)]
+
+        return state
+
+    def load(self, policy: Policy):
         """
         Load this rule into the kernel.
         """
 
-        raise NotImplementedError('Subclasses must implement Rule.load()')
+        # Keep track of func numbers
+        for func in self.func:
+            # Don't double count
+            if policy.funcs.get((func, False), None) is not None:
+                continue
+            policy.funcs[(func, False)] = len(policy.funcs)
+
+        # Keep track of kfunc numbers
+        for kfunc in self.kfunc:
+            # Don't double count
+            if policy.funcs.get((kfunc, True), None) is not None:
+                continue
+            policy.funcs[(kfunc, True)] = len(policy.funcs)
 
 
 class FSRule(Rule):
@@ -336,8 +313,8 @@ class FSRule(Rule):
     A filesystem rule.
     """
 
-    def __init__(self, policy: Policy, rule_dict: Dict[str, Any]):
-        super().__init__(policy, rule_dict)
+    def __init__(self, rule_dict: Dict[str, Any]):
+        super().__init__(rule_dict)
 
         self.access = listify(rule_dict.get('access', []))
         if not self.access:
@@ -347,8 +324,17 @@ class FSRule(Rule):
         if not self.file:
             raise PolicyException(f"Please specify file in {self}")
 
-    def load(self):
-        pass  # TODO
+    def load(self, policy: Policy):
+        super().load(policy)
+        state = self.calculate_state_number(policy)
+        for _file in self.file:
+            Commands.add_fs_rule(
+                policy.profile,
+                _file,
+                FS_ACCESS.from_list(self.access),
+                BPFBOX_ACTION.from_list(self.action),
+                state=state,
+            )
 
 
 class NetRule(Rule):
@@ -356,8 +342,8 @@ class NetRule(Rule):
     A network socket rule.
     """
 
-    def __init__(self, policy: Policy, rule_dict: Dict[str, Any]):
-        super().__init__(policy, rule_dict)
+    def __init__(self, rule_dict: Dict[str, Any]):
+        super().__init__(rule_dict)
 
         self.operation = listify(rule_dict.get('operation', []))
         if not self.operation:
@@ -367,8 +353,17 @@ class NetRule(Rule):
         if not self.family:
             raise PolicyException(f"Please specify family in {self}")
 
-    def load(self):
-        pass  # TODO
+    def load(self, policy: Policy):
+        super().load(policy)
+        state = self.calculate_state_number(policy)
+        for family in self.family:
+            Commands.add_net_rule(
+                policy.profile,
+                NET_ACCESS.from_list(self.operation),
+                NET_FAMILY.from_string(family),
+                BPFBOX_ACTION.from_list(self.action),
+                state,
+            )
 
 
 class SignalRule(Rule):
@@ -376,8 +371,8 @@ class SignalRule(Rule):
     A signal rule.
     """
 
-    def __init__(self, policy: Policy, rule_dict: Dict[str, Any]):
-        super().__init__(policy, rule_dict)
+    def __init__(self, rule_dict: Dict[str, Any]):
+        super().__init__(rule_dict)
 
         self.signal = listify(rule_dict.get('signal', []))
         if not self.signal:
@@ -387,8 +382,17 @@ class SignalRule(Rule):
         if not self.target:
             raise PolicyException(f"Please specify target in {self}")
 
-    def load(self):
-        pass  # TODO
+    def load(self, policy: Policy):
+        super().load(policy)
+        state = self.calculate_state_number(policy)
+        for target in self.target:
+            Commands.add_ipc_rule(
+                policy.profile,
+                target,
+                IPC_ACCESS.from_list(self.signal),
+                BPFBOX_ACTION.from_list(self.action),
+                state,
+            )
 
 
 class Policy:
@@ -397,13 +401,13 @@ class Policy:
     """
 
     def __init__(self, policy_dict: Dict[str, Union[int, str]]) -> Policy:
+        validate(policy_dict, SCHEMA)
+
         profile = policy_dict.get('profile', None)
-        if profile is None:
-            raise PolicyException("Policy must specify a 'profile'")
-        # TODO: sanity check on profile type
         self.profile = profile
 
-        validate(policy_dict, SCHEMA)
+        # TODO: either infer this or make it explicit
+        self.taint_on_exec = False
 
         # Dictionary of funcs and kfuncs
         self.funcs = {}
@@ -412,11 +416,33 @@ class Policy:
 
         self._parse_rules(policy_dict)
 
-    def load(self):
+    def load(self, bpf):
         """
         Load policy into the kernel.
         """
-        pass  # TODO
+
+        Commands.add_profile(self.profile, self.taint_on_exec)
+
+        for rule in self.rules:
+            rule.load(self)
+
+        for (sym, is_kfunc), state_idx in self.funcs.items():
+            fn_name = f'bpfbox_state_probe_{state_idx}'
+            ret_fn_name = f'bpfbox_state_retprobe_{state_idx}'
+            if is_kfunc:
+                bpf.attach_kprobe(
+                    sym=sym, fn_name=fn_name,
+                )
+                bpf.attach_kretprobe(
+                    sym=sym, fn_name=ret_fn_name,
+                )
+            else:
+                bpf.attach_uprobe(
+                    name=self.profile, sym=sym, fn_name=fn_name,
+                )
+                bpf.attach_uretprobe(
+                    name=self.profile, sym=sym, fn_name=ret_fn_name,
+                )
 
     @staticmethod
     def from_string(policy_string: str) -> Policy:
@@ -445,7 +471,7 @@ class Policy:
             raise PolicyLoadException(f"Failed to load policy from file {f_name}")
 
     def __repr__(self):
-        return f"Policy('{self.profile}')"
+        return f"Policy({self.__dict__})"
 
     def _parse_rules(self, policy_dict: Dict[str, Union[str, List[str]]]):
         fs_rules = policy_dict.get('fs', [])
@@ -453,15 +479,17 @@ class Policy:
         signal_rules = policy_dict.get('signal', [])
 
         for rule in fs_rules:  # type: Dict[str, Union[str, List[str]]]
-            self.rules.append(FSRule(self, rule))
+            self.rules.append(FSRule(rule))
 
         for rule in net_rules:  # type: Dict[str, Union[str, List[str]]]
-            self.rules.append(NetRule(self, rule))
+            self.rules.append(NetRule(rule))
 
         for rule in signal_rules:  # type: Dict[str, Union[str, List[str]]]
-            self.rules.append(SignalRule(self, rule))
+            self.rules.append(SignalRule(rule))
 
 
 if __name__ == "__main__":
+    from pprint import pprint
+
     p = Policy.from_file('../sample_policy/ls.toml')
-    print(p)
+    pprint(p.__dict__)

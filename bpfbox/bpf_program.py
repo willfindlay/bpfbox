@@ -38,6 +38,7 @@ from bpfbox.utils import (
     profile_key_to_exe,
 )
 from bpfbox.libbpfbox import register_uprobes
+from bpfbox.policy import Policy
 
 logger = get_logger()
 
@@ -210,19 +211,20 @@ class BPFProgram:
         register_uprobes(self.bpf)
         self.have_registered_uprobes = True
 
-    def generate_policy(self):
-        logger.info('Generating policy...')
+    def load_policy(self):
+        logger.info('Loading policy...')
         policy_files = []
         for (dirpath, dirnames, filenames) in os.walk(defs.policy_directory):
             policy_files.extend([os.path.join(dirpath, f) for f in filenames])
         for f in policy_files:
-            logger.info(f'Generating policy for {f}...')
+            logger.info(f'Loading policy for {f}...')
             try:
-                pass
+                p = Policy.from_file(f)
+                p.load(self.bpf)
             except Exception as e:
                 logger.error(f'Unable to generate policy for {f}!', exc_info=e)
                 return
-        logger.info('Generated policy successfully!')
+        logger.info('Finished loading policy')
 
     def generate_state_probes(self, max_state: int = 64) -> str:
         src = """
@@ -256,34 +258,6 @@ int bpfbox_state_retprobe_NUMBER(struct pt_regs *ctx)
         for i in range(max_state):
             src += probes.replace('NUMBER', str(i))
         return src
-
-    def attach_state_probe(
-        self,
-        state_idx: int,
-        symbol: Optional[str] = None,
-        address: Optional[hex] = None,
-        path: Optional[str] = None,
-        kfunc: bool = False,
-    ):
-        assert symbol or address
-        assert not (symbol and address)
-        assert kfunc or path
-        assert not (kfunc and path)
-
-        fn_name = f'bpfbox_state_probe_{state_idx}'
-        ret_fn_name = f'bpfbox_state_retprobe_{state_idx}'
-
-        if kfunc:
-            # TODO handle exceptions in loading
-            self.bpf.attach_kprobe(event=symbol, fn_name=fn_name)
-            self.bpf.attach_kretprobe(event=symbol, fn_name=ret_fn_name)
-
-        if kfunc:
-            # TODO handle exceptions in loading
-            self.bpf.attach_uprobe(name=path, sym=symbol, addr=address, fn_name=fn_name)
-            self.bpf.attach_uretprobe(
-                name=path, sym=symbol, addr=address, fn_name=ret_fn_name
-            )
 
     def _set_cflags(self, maps_pinned):
         flags = []
