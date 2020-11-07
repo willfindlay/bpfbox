@@ -1,0 +1,13 @@
+profile = '/bin/ls'
+
+[[fs]]
+  action = ['allow', 'taint']
+  access = 'getattr'
+  file = '/**'
+  func = 'main'
+
+[[fs]]
+  action = 'audit'
+  access = 'getattr'
+  file = '/path/to/sensitive/directory/**'
+  func = 'main'

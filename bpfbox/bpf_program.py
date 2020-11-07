@@ -261,7 +261,7 @@ int bpfbox_state_retprobe_NUMBER(struct pt_regs *ctx)
         self,
         state_idx: int,
         symbol: Optional[str] = None,
-        address: Optional[hex] = 0x0,
+        address: Optional[hex] = None,
         path: Optional[str] = None,
         kfunc: bool = False,
     ):

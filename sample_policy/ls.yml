@@ -1,0 +1,12 @@
+profile: /usr/bin/ls
+
+fs:
+  - actions: ['allow']
+    accesses: ['read', 'getattr']
+    files: ['/**']
+  - actions:
+    - 'audit'
+    accesses:
+    - 'read'
+    files:
+    - '/root/**'
