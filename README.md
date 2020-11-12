@@ -34,3 +34,25 @@ Our research paper: https://www.cisl.carleton.ca/~will/written/conference/bpfbox
 1. Install policy files in `/var/lib/bpfbox/policy`
 1. Run the daemon using `sudo bpfboxd`
 1. Inspect audit logs with `tail -f /var/log/bpfbox/bpfbox.log`
+
+## Citation
+
+If you would like to cite this work, we request that you use the following bibtex entry:
+```bibtex
+@inproceedings{findlay2020_bpfbox,
+    author    = {Findlay, William and Somayaji, Anil and Barrera, David},
+    title     = {{bpfbox: Simple Precise Process Confinement with eBPF}},
+    year      = {2020},
+    isbn      = {9781450380843},
+    publisher = {Association for Computing Machinery},
+    address   = {New York, NY, USA},
+    url       = {https://doi-org.proxy.library.carleton.ca/10.1145/3411495.3421358},
+    doi       = {10.1145/3411495.3421358},
+    booktitle = {Proceedings of the 2020 ACM SIGSAC Conference on Cloud Computing Security Workshop},
+    pages     = {91–103},
+    numpages  = {13},
+    keywords  = {ebpf, application confinement, access control, sandboxing, operating system security, linux},
+    location  = {Virtual Event, USA},
+    series    = {CCSW'20}
+}
+```
