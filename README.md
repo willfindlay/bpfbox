@@ -46,7 +46,6 @@ If you would like to cite this work, we request that you use the following bibte
     isbn      = {9781450380843},
     publisher = {Association for Computing Machinery},
     address   = {New York, NY, USA},
-    url       = {https://doi-org.proxy.library.carleton.ca/10.1145/3411495.3421358},
     doi       = {10.1145/3411495.3421358},
     booktitle = {Proceedings of the 2020 ACM SIGSAC Conference on Cloud Computing Security Workshop},
     pages     = {91–103},
