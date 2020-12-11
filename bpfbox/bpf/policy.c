@@ -1123,17 +1123,14 @@ LSM_PROBE(bprm_committing_creds, struct linux_binprm *bprm)
     return 0;
 }
 
-LSM_PROBE(task_alloc, struct task_struct *task, unsigned long clone_flags)
+TRACEPOINT_PROBE(sched, sched_process_fork)
 {
     struct bpfbox_process_t *process;
     struct bpfbox_process_t *parent_process;
 
-    struct task_struct *c = task;
-    struct task_struct *p = task->parent;
-
-    u32 ppid = p->pid;
-    u32 cpid = c->pid;
-    u32 ctgid = c->tgid;
+    u32 ppid = args->parent_pid;
+    u32 cpid = args->child_pid;
+    u32 ctgid = bpf_get_current_pid_tgid() >> 32;
 
     // Are we watching parent?
     parent_process = processes.lookup(&ppid);
