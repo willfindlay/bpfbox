@@ -2,6 +2,10 @@
 
 `bpfbox` is a policy enforcement engine written in eBPF to confine process access to security-sensitive system resources.
 
+## bpfbox is EOL
+
+This project is being **replaced with a re-implementation in Rust**. The plan is to archive this repository when the new version is released. Please stay tuned for details.
+
 ## Links
 
 Our research paper: https://www.cisl.carleton.ca/~will/written/conference/bpfbox-ccsw2020.pdf
