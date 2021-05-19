@@ -4,7 +4,7 @@
 
 ## bpfbox is EOL
 
-This project is being **replaced with a re-implementation in Rust**. The plan is to archive this repository when the new version is released. Please stay tuned for details.
+BPFBox is being replaced by [BPFContain](https://github.com/willfindlay/bpfcontain-rs/), a new confinement solution written in Rust using libbpf-rs.
 
 ## Links
 
