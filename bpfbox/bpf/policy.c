@@ -131,8 +131,8 @@ static __always_inline void audit_network(struct bpfbox_process_t *process,
  * Helper Functions
  * ========================================================================= */
 
-static __always_inline struct bpfbox_process_t *create_process(
-    u32 pid, u32 tgid, u64 profile_key, u64 state, bool tainted)
+static __always_inline struct bpfbox_process_t *
+create_process(u32 pid, u32 tgid, u64 profile_key, u64 state, bool tainted)
 {
     struct bpfbox_process_t new_process = {};
     new_process.pid = pid;
@@ -159,9 +159,9 @@ static __always_inline struct bpfbox_profile_t *create_profile(u64 profile_key,
     return profiles.lookup_or_try_init(&profile_key, &new_profile);
 }
 
-static __always_inline enum bpfbox_action_t policy_decision(
-    struct bpfbox_process_t *process, struct bpfbox_policy_t *policy,
-    u32 access)
+static __always_inline enum bpfbox_action_t
+policy_decision(struct bpfbox_process_t *process,
+                struct bpfbox_policy_t *policy, u32 access)
 {
     // Set deny action based on whether or not we are enforcing
 #ifndef BPFBOX_ENFORCING
@@ -185,12 +185,14 @@ static __always_inline enum bpfbox_action_t policy_decision(
     }
 
     // Set allow action based on whether or not we want to audit
-    if (access & policy->audit.access && (!policy->audit.state || process->state & policy->audit.state)) {
+    if (access & policy->audit.access &&
+        (!policy->audit.state || process->state & policy->audit.state)) {
         allow_action |= ACTION_AUDIT;
     }
 
     // Taint process if we hit a taint rule
-    if (!tainted && (access & policy->taint.access) && (!policy->taint.state || process->state & policy->taint.state)) {
+    if (!tainted && (access & policy->taint.access) &&
+        (!policy->taint.state || process->state & policy->taint.state)) {
         process->tainted = 1;
         return allow_action | ACTION_TAINT;
     }
@@ -201,7 +203,8 @@ static __always_inline enum bpfbox_action_t policy_decision(
     }
 
     // If we are tainted, but the operation is allowed
-    if ((access & policy->allow.access) == access && (!policy->allow.state || process->state & policy->allow.state)) {
+    if ((access & policy->allow.access) == access &&
+        (!policy->allow.state || process->state & policy->allow.state)) {
         return allow_action;
     }
 
@@ -287,9 +290,9 @@ static __always_inline enum bpfbox_fs_access_t fmode_to_access(umode_t mask)
     return access;
 }
 
-static __always_inline enum bpfbox_action_t fs_policy_decision(
-    struct bpfbox_process_t *process, struct inode *inode,
-    enum bpfbox_fs_access_t access)
+static __always_inline enum bpfbox_action_t
+fs_policy_decision(struct bpfbox_process_t *process, struct inode *inode,
+                   enum bpfbox_fs_access_t access)
 {
     struct bpfbox_fs_policy_key_t key = {
         .st_ino = inode->i_ino,
@@ -511,7 +514,8 @@ LSM_PROBE(inode_getattr, struct path *path)
 }
 
 /* A task attempts to change an extended attribute of @dentry */
-LSM_PROBE(inode_setxattr, struct dentry *dentry)
+LSM_PROBE(inode_setxattr, struct user_namespace *mnt_userns,
+          struct dentry *dentry)
 {
     struct bpfbox_process_t *process = get_current_process();
     if (!process) {
@@ -562,12 +566,16 @@ LSM_PROBE(inode_listxattr, struct dentry *dentry)
 }
 
 /* A task attempts to remove an extended attribute from @dentry */
-LSM_PROBE(inode_removexattr, struct dentry *dentry)
+LSM_PROBE(inode_removexattr, struct user_namespace *mnt_userns,
+          struct dentry *dentry)
 {
     struct bpfbox_process_t *process = get_current_process();
     if (!process) {
         return 0;
     }
+
+    if (!dentry)
+        return 0;
 
     struct inode *inode = dentry->d_inode;
 
@@ -702,9 +710,10 @@ LSM_PROBE(file_mprotect, struct vm_area_struct *vma, unsigned long reqprot,
 
 // TODO: keep going with this
 
-static __always_inline enum bpfbox_action_t ipc_policy_decision(
-    struct bpfbox_process_t *subject_process,
-    struct bpfbox_process_t *object_process, enum bpfbox_ipc_access_t access)
+static __always_inline enum bpfbox_action_t
+ipc_policy_decision(struct bpfbox_process_t *subject_process,
+                    struct bpfbox_process_t *object_process,
+                    enum bpfbox_ipc_access_t access)
 {
     struct bpfbox_ipc_policy_key_t key = {
         .subject_key = subject_process->profile_key,
@@ -719,21 +728,21 @@ static __always_inline enum bpfbox_action_t ipc_policy_decision(
 static __always_inline enum bpfbox_ipc_access_t signal_to_ipc_access(int sig)
 {
     switch (sig) {
-        case 0:
-            return IPC_SIGCHECK;
-            break;
-        case SIGCHLD:
-            return IPC_SIGCHLD;
-            break;
-        case SIGKILL:
-            return IPC_SIGKILL;
-            break;
-        case SIGSTOP:
-            return IPC_SIGSTOP;
-            break;
-        default:
-            return IPC_SIGMISC;
-            break;
+    case 0:
+        return IPC_SIGCHECK;
+        break;
+    case SIGCHLD:
+        return IPC_SIGCHLD;
+        break;
+    case SIGKILL:
+        return IPC_SIGKILL;
+        break;
+    case SIGSTOP:
+        return IPC_SIGSTOP;
+        break;
+    default:
+        return IPC_SIGMISC;
+        break;
     }
 }
 
@@ -880,9 +889,10 @@ out:
  * Networking Policy
  * ========================================================================= */
 
-static __always_inline enum bpfbox_action_t net_policy_decision(
-    struct bpfbox_process_t *process, enum bpfbox_network_family_t family,
-    enum bpfbox_network_access_t access)
+static __always_inline enum bpfbox_action_t
+net_policy_decision(struct bpfbox_process_t *process,
+                    enum bpfbox_network_family_t family,
+                    enum bpfbox_network_access_t access)
 {
     struct bpfbox_network_policy_key_t key = {};
 
@@ -894,8 +904,8 @@ static __always_inline enum bpfbox_action_t net_policy_decision(
     return policy_decision(process, policy, access);
 }
 
-static __always_inline enum bpfbox_network_family_t af_to_network_family(
-    int family)
+static __always_inline enum bpfbox_network_family_t
+af_to_network_family(int family)
 {
     if (family >= NET_FAMILY_UNKNOWN)
         return NET_FAMILY_UNKNOWN;
@@ -1163,8 +1173,7 @@ LSM_PROBE(task_free, struct task_struct *task)
 
 static __always_inline void add_policy_common(struct bpfbox_policy_t *policy,
                                               struct bpfbox_profile_t *profile,
-                                              u32 access_mask,
-                                              u64 state_mask,
+                                              u32 access_mask, u64 state_mask,
                                               enum bpfbox_action_t action)
 {
     if (action & ACTION_TAINT) {
@@ -1231,7 +1240,7 @@ int add_fs_rule(struct pt_regs *ctx)
     key.profile_key = profile_key;
     key.st_ino = st_ino;
     key.st_dev = st_dev;
-    //key.state = state;
+    // key.state = state;
 
     struct bpfbox_policy_t _init = {};
     struct bpfbox_policy_t *policy = fs_policy.lookup_or_try_init(&key, &_init);
@@ -1280,7 +1289,7 @@ int add_procfs_rule(struct pt_regs *ctx)
     struct bpfbox_procfs_policy_key_t key = {};
     key.subject_profile_key = subject_profile_key;
     key.object_profile_key = object_profile_key;
-    //key.state = state;
+    // key.state = state;
 
     struct bpfbox_policy_t _init = {};
     struct bpfbox_policy_t *policy =
@@ -1329,7 +1338,7 @@ int add_ipc_rule(struct pt_regs *ctx)
     struct bpfbox_ipc_policy_key_t key = {};
     key.subject_key = subject_key;
     key.object_key = object_key;
-    //key.state = state;
+    // key.state = state;
 
     struct bpfbox_policy_t _init = {};
     struct bpfbox_policy_t *policy =
@@ -1378,7 +1387,7 @@ int add_net_rule(struct pt_regs *ctx)
     struct bpfbox_network_policy_key_t key = {};
     key.profile_key = profile_key;
     key.family = family;
-    //key.state = state;
+    // key.state = state;
 
     struct bpfbox_policy_t _init = {};
     struct bpfbox_policy_t *policy =

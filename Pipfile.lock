@@ -1,7 +1,7 @@
 {
     "_meta": {
         "hash": {
-            "sha256": "610064f906e6221ccf74b82e24ed748646c6e54f28cb2f4510a8d7160fa8467c"
+            "sha256": "f752012eca6d1baeac297e01c4c5cc514d825bc66ea9e2bd6396b955e627d017"
         },
         "pipfile-spec": 6,
         "requires": {
@@ -23,10 +23,6 @@
             ],
             "markers": "python_version >= '2.7' and python_version not in '3.0, 3.1, 3.2, 3.3, 3.4'",
             "version": "==21.2.0"
-        },
-        "bpfbox": {
-            "editable": true,
-            "path": "."
         },
         "docutils": {
             "hashes": [
