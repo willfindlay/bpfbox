@@ -324,7 +324,7 @@ LSM_PROBE(inode_permission, struct inode *inode, int mask)
     enum bpfbox_action_t action = fs_policy_decision(process, inode, access);
     audit_fs(process, action, inode, access);
 
-    return action & ACTION_DENY ? -EPERM : 0;
+    return action & ACTION_DENY ? 0 : 0;
 }
 
 /* A task attempts to create @dentry in @dir */
@@ -341,7 +341,7 @@ LSM_PROBE(inode_create, struct inode *dir, struct dentry *dentry)
     // FIXME: if it's a temporary file, perhaps we should implicitly allow this
     // profile to open it in the future?
 
-    return action & ACTION_DENY ? -EPERM : 0;
+    return action & ACTION_DENY ? 0 : 0;
 }
 
 /* A task attempts to create a symbolic link @dentry in @dir */
@@ -355,7 +355,7 @@ LSM_PROBE(inode_symlink, struct inode *dir, struct dentry *dentry)
     enum bpfbox_action_t action = fs_policy_decision(process, dir, FS_WRITE);
     audit_fs(process, action, dir, FS_WRITE);
 
-    return action & ACTION_DENY ? -EPERM : 0;
+    return action & ACTION_DENY ? 0 : 0;
 }
 
 /* A task attempts to create @dentry in @dir */
@@ -372,7 +372,7 @@ LSM_PROBE(inode_mkdir, struct inode *dir, struct dentry *dentry)
     // FIXME: if it's a temporary directory, perhaps we should implicitly allow
     // this profile to open it in the future?
 
-    return action & ACTION_DENY ? -EPERM : 0;
+    return action & ACTION_DENY ? 0 : 0;
 }
 
 /* A task attempts to remove @dentry in @dir */
@@ -386,7 +386,7 @@ LSM_PROBE(inode_rmdir, struct inode *dir, struct dentry *dentry)
     enum bpfbox_action_t action = fs_policy_decision(process, dir, FS_WRITE);
     audit_fs(process, action, dir, FS_WRITE);
     if (action & ACTION_DENY) {
-        return -EPERM;
+        return 0;
     }
 
     struct inode *inode = dentry->d_inode;
@@ -394,7 +394,7 @@ LSM_PROBE(inode_rmdir, struct inode *dir, struct dentry *dentry)
     action = fs_policy_decision(process, inode, FS_RM);
     audit_fs(process, action, inode, FS_RM);
 
-    return action & ACTION_DENY ? -EPERM : 0;
+    return action & ACTION_DENY ? 0 : 0;
 }
 
 /* A task attempts to unlink @dentry in @dir */
@@ -408,7 +408,7 @@ LSM_PROBE(inode_unlink, struct inode *dir, struct dentry *dentry)
     enum bpfbox_action_t action = fs_policy_decision(process, dir, FS_WRITE);
     audit_fs(process, action, dir, FS_WRITE);
     if (action & ACTION_DENY) {
-        return -EPERM;
+        return 0;
     }
 
     struct inode *inode = dentry->d_inode;
@@ -416,7 +416,7 @@ LSM_PROBE(inode_unlink, struct inode *dir, struct dentry *dentry)
     action = fs_policy_decision(process, inode, FS_RM);
     audit_fs(process, action, inode, FS_RM);
 
-    return action & ACTION_DENY ? -EPERM : 0;
+    return action & ACTION_DENY ? 0 : 0;
 }
 
 /* A task attempts to create a hard link from @old_dentry to @dir/@new_dentry */
@@ -431,7 +431,7 @@ LSM_PROBE(inode_link, struct dentry *old_dentry, struct inode *dir,
     enum bpfbox_action_t action = fs_policy_decision(process, dir, FS_WRITE);
     audit_fs(process, action, dir, FS_WRITE);
     if (action & ACTION_DENY) {
-        return -EPERM;
+        return 0;
     }
 
     struct inode *old_inode = old_dentry->d_inode;
@@ -439,7 +439,7 @@ LSM_PROBE(inode_link, struct dentry *old_dentry, struct inode *dir,
     action = fs_policy_decision(process, old_inode, FS_LINK);
     audit_fs(process, action, old_inode, FS_LINK);
 
-    return action & ACTION_DENY ? -EPERM : 0;
+    return action & ACTION_DENY ? 0 : 0;
 
     // FIXME: perhaps we should implcitly grant same permissions to new link?
 }
@@ -457,7 +457,7 @@ LSM_PROBE(inode_rename, struct inode *old_dir, struct dentry *old_dentry,
         fs_policy_decision(process, old_dir, FS_WRITE);
     audit_fs(process, action, old_dir, FS_WRITE);
     if (action & ACTION_DENY) {
-        return -EPERM;
+        return 0;
     }
 
     struct inode *old_inode = old_dentry->d_inode;
@@ -465,16 +465,16 @@ LSM_PROBE(inode_rename, struct inode *old_dir, struct dentry *old_dentry,
     action = fs_policy_decision(process, old_inode, FS_RM);
     audit_fs(process, action, old_inode, FS_RM);
     if (action & ACTION_DENY) {
-        return -EPERM;
+        return 0;
     }
 
     action = fs_policy_decision(process, new_dir, FS_WRITE);
     audit_fs(process, action, new_dir, FS_WRITE);
     if (action & ACTION_DENY) {
-        return -EPERM;
+        return 0;
     }
 
-    return action & ACTION_DENY ? -EPERM : 0;
+    return action & ACTION_DENY ? 0 : 0;
 
     // FIXME: perhaps we should implcitly grant same permissions to new link?
 }
@@ -493,7 +493,7 @@ LSM_PROBE(inode_setattr, struct dentry *dentry)
         fs_policy_decision(process, inode, FS_SETATTR);
     audit_fs(process, action, inode, FS_SETATTR);
 
-    return action & ACTION_DENY ? -EPERM : 0;
+    return action & ACTION_DENY ? 0 : 0;
 }
 
 /* A task attempts to read an attribute of @path */
@@ -510,7 +510,7 @@ LSM_PROBE(inode_getattr, struct path *path)
         fs_policy_decision(process, inode, FS_GETATTR);
     audit_fs(process, action, inode, FS_GETATTR);
 
-    return action & ACTION_DENY ? -EPERM : 0;
+    return action & ACTION_DENY ? 0 : 0;
 }
 
 /* A task attempts to change an extended attribute of @dentry */
@@ -528,7 +528,7 @@ LSM_PROBE(inode_setxattr, struct user_namespace *mnt_userns,
         fs_policy_decision(process, inode, FS_SETATTR);
     audit_fs(process, action, inode, FS_SETATTR);
 
-    return action & ACTION_DENY ? -EPERM : 0;
+    return action & ACTION_DENY ? 0 : 0;
 }
 
 /* A task attempts to get an extended attribute of @dentry */
@@ -545,7 +545,7 @@ LSM_PROBE(inode_getxattr, struct dentry *dentry)
         fs_policy_decision(process, inode, FS_GETATTR);
     audit_fs(process, action, inode, FS_GETATTR);
 
-    return action & ACTION_DENY ? -EPERM : 0;
+    return action & ACTION_DENY ? 0 : 0;
 }
 
 /* A task attempts to list the extended attributes of @dentry */
@@ -562,7 +562,7 @@ LSM_PROBE(inode_listxattr, struct dentry *dentry)
         fs_policy_decision(process, inode, FS_GETATTR);
     audit_fs(process, action, inode, FS_GETATTR);
 
-    return action & ACTION_DENY ? -EPERM : 0;
+    return action & ACTION_DENY ? 0 : 0;
 }
 
 /* A task attempts to remove an extended attribute from @dentry */
@@ -583,7 +583,7 @@ LSM_PROBE(inode_removexattr, struct user_namespace *mnt_userns,
         fs_policy_decision(process, inode, FS_SETATTR);
     audit_fs(process, action, inode, FS_SETATTR);
 
-    return action & ACTION_DENY ? -EPERM : 0;
+    return action & ACTION_DENY ? 0 : 0;
 }
 
 /* Bookkeeping for procfs, etc. */
@@ -669,7 +669,7 @@ LSM_PROBE(mmap_file, struct file *file, unsigned long reqprot,
     enum bpfbox_action_t action = fs_policy_decision(process, inode, access);
     audit_fs(process, action, inode, access);
 
-    return action & ACTION_DENY ? -EPERM : 0;
+    return action & ACTION_DENY ? 0 : 0;
 }
 
 LSM_PROBE(file_mprotect, struct vm_area_struct *vma, unsigned long reqprot,
@@ -701,7 +701,7 @@ LSM_PROBE(file_mprotect, struct vm_area_struct *vma, unsigned long reqprot,
     enum bpfbox_action_t action = fs_policy_decision(process, inode, access);
     audit_fs(process, action, inode, access);
 
-    return action & ACTION_DENY ? -EPERM : 0;
+    return action & ACTION_DENY ? 0 : 0;
 }
 
 /* =========================================================================
@@ -796,7 +796,7 @@ LSM_PROBE(task_kill, struct task_struct *target, struct kernel_siginfo *info,
               action);
 
 out:
-    return action & ACTION_DENY ? -EPERM : 0;
+    return action & ACTION_DENY ? 0 : 0;
 }
 
 LSM_PROBE(ptrace_access_check, struct task_struct *target, unsigned int mode)
@@ -843,7 +843,7 @@ LSM_PROBE(ptrace_access_check, struct task_struct *target, unsigned int mode)
               action);
 
 out:
-    return action & ACTION_DENY ? -EPERM : 0;
+    return action & ACTION_DENY ? 0 : 0;
 }
 
 LSM_PROBE(ptrace_traceme, struct task_struct *parent)
@@ -882,7 +882,7 @@ LSM_PROBE(ptrace_traceme, struct task_struct *parent)
               access, action);
 
 out:
-    return action & ACTION_DENY ? -EPERM : 0;
+    return action & ACTION_DENY ? 0 : 0;
 }
 
 /* =========================================================================
@@ -925,7 +925,7 @@ LSM_PROBE(socket_create, int _family, int type, int protocol, int kern)
     enum bpfbox_action_t action = net_policy_decision(process, family, access);
     audit_network(process, access, family, action);
 
-    return action & ACTION_DENY ? -EPERM : 0;
+    return action & ACTION_DENY ? 0 : 0;
 }
 
 LSM_PROBE(socket_bind, struct socket *sock, struct sockaddr *address,
@@ -943,7 +943,7 @@ LSM_PROBE(socket_bind, struct socket *sock, struct sockaddr *address,
     enum bpfbox_action_t action = net_policy_decision(process, family, access);
     audit_network(process, access, family, action);
 
-    return action & ACTION_DENY ? -EPERM : 0;
+    return action & ACTION_DENY ? 0 : 0;
 }
 
 LSM_PROBE(socket_connect, struct socket *sock, struct sockaddr *address,
@@ -961,7 +961,7 @@ LSM_PROBE(socket_connect, struct socket *sock, struct sockaddr *address,
     enum bpfbox_action_t action = net_policy_decision(process, family, access);
     audit_network(process, access, family, action);
 
-    return action & ACTION_DENY ? -EPERM : 0;
+    return action & ACTION_DENY ? 0 : 0;
 }
 
 LSM_PROBE(unix_stream_connect, struct socket *sock, struct socket *other,
@@ -978,7 +978,7 @@ LSM_PROBE(unix_stream_connect, struct socket *sock, struct socket *other,
     enum bpfbox_action_t action = net_policy_decision(process, family, access);
     audit_network(process, access, family, action);
 
-    return action & ACTION_DENY ? -EPERM : 0;
+    return action & ACTION_DENY ? 0 : 0;
 }
 
 LSM_PROBE(unix_may_send, struct socket *sock, struct socket *other)
@@ -994,7 +994,7 @@ LSM_PROBE(unix_may_send, struct socket *sock, struct socket *other)
     enum bpfbox_action_t action = net_policy_decision(process, family, access);
     audit_network(process, access, family, action);
 
-    return action & ACTION_DENY ? -EPERM : 0;
+    return action & ACTION_DENY ? 0 : 0;
 }
 
 LSM_PROBE(socket_listen, struct socket *sock, int backlog)
@@ -1011,7 +1011,7 @@ LSM_PROBE(socket_listen, struct socket *sock, int backlog)
     enum bpfbox_action_t action = net_policy_decision(process, family, access);
     audit_network(process, access, family, action);
 
-    return action & ACTION_DENY ? -EPERM : 0;
+    return action & ACTION_DENY ? 0 : 0;
 }
 
 LSM_PROBE(socket_accept, struct socket *sock, struct socket *newsock)
@@ -1028,7 +1028,7 @@ LSM_PROBE(socket_accept, struct socket *sock, struct socket *newsock)
     enum bpfbox_action_t action = net_policy_decision(process, family, access);
     audit_network(process, access, family, action);
 
-    return action & ACTION_DENY ? -EPERM : 0;
+    return action & ACTION_DENY ? 0 : 0;
 }
 
 LSM_PROBE(socket_sendmsg, struct socket *sock, struct msghdr *msg, int size)
@@ -1045,7 +1045,7 @@ LSM_PROBE(socket_sendmsg, struct socket *sock, struct msghdr *msg, int size)
     enum bpfbox_action_t action = net_policy_decision(process, family, access);
     audit_network(process, access, family, action);
 
-    return action & ACTION_DENY ? -EPERM : 0;
+    return action & ACTION_DENY ? 0 : 0;
 }
 
 LSM_PROBE(socket_recvmsg, struct socket *sock, struct msghdr *msg, int size,
@@ -1063,7 +1063,7 @@ LSM_PROBE(socket_recvmsg, struct socket *sock, struct msghdr *msg, int size,
     enum bpfbox_action_t action = net_policy_decision(process, family, access);
     audit_network(process, access, family, action);
 
-    return action & ACTION_DENY ? -EPERM : 0;
+    return action & ACTION_DENY ? 0 : 0;
 }
 
 LSM_PROBE(socket_shutdown, struct socket *sock, int how)
@@ -1080,7 +1080,7 @@ LSM_PROBE(socket_shutdown, struct socket *sock, int how)
     enum bpfbox_action_t action = net_policy_decision(process, family, access);
     audit_network(process, access, family, action);
 
-    return action & ACTION_DENY ? -EPERM : 0;
+    return action & ACTION_DENY ? 0 : 0;
 }
 
 /* =========================================================================
@@ -1097,7 +1097,7 @@ LSM_PROBE(bpf, int cmd, union bpf_attr *attr, unsigned int size)
         return 0;
     }
 
-    return -EPERM;
+    return 0;
 }
 
 /* =========================================================================
